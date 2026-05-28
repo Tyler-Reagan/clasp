@@ -333,7 +333,8 @@ func (m *Model) resizeDetail() {
 
 func (m Model) View() string {
 	if !m.ready {
-		return "loading..."
+		return stylePrimary.Bold(true).Render("clasp") + " " +
+			styleMuted.Render("· reading ~/.claude…")
 	}
 	if m.showHelp {
 		return m.renderHelp()
@@ -353,6 +354,12 @@ func (m Model) View() string {
 		body,
 		m.renderStatus(),
 	)
+}
+
+// emptyState renders a uniform empty-list message — a muted leading glyph
+// plus the supplied label. Used per-tab when there's nothing to show.
+func emptyState(msg string) string {
+	return styleMuted.Render("· " + msg)
 }
 
 // renderHelp is the ? overlay — a centered box listing context-aware
@@ -511,7 +518,7 @@ func (m Model) renderStatus() string {
 	if m.statusMsg != "" {
 		right = m.statusMsg
 	} else if m.loadErr != nil {
-		right = styleYellow.Render("warn: " + m.loadErr.Error())
+		right = styleRed.Render("⚠ " + m.loadErr.Error())
 	}
 
 	hint := m.help.View(contextKeys{keys: m.keys, focus: m.focus})
@@ -612,13 +619,13 @@ func (m Model) listLen() int {
 
 func (m Model) detailContent() string {
 	if m.st == nil {
-		return styleRed.Render("could not load ~/.claude state")
+		return styleRed.Render("⚠ could not load ~/.claude state")
 	}
 	c := m.cursors[m.tab]
 	switch m.tab {
 	case tabSessions:
 		if c >= len(m.st.Sessions) {
-			return styleMuted.Render("no active sessions")
+			return emptyState("no active sessions")
 		}
 		s := m.st.Sessions[c]
 		return strings.Join([]string{
@@ -633,7 +640,7 @@ func (m Model) detailContent() string {
 
 	case tabSkills:
 		if c >= len(m.st.Skills) {
-			return styleMuted.Render("no skills installed")
+			return emptyState("no skills installed")
 		}
 		sk := m.st.Skills[c]
 		lines := []string{styleDetailTitle.Render(sk.Name), ""}
@@ -657,7 +664,7 @@ func (m Model) detailContent() string {
 
 	case tabPlugins:
 		if c >= len(m.st.Plugins) {
-			return styleMuted.Render("no plugins installed")
+			return emptyState("no plugins installed")
 		}
 		p := m.st.Plugins[c]
 		statusStr := styleRed.Render("disabled")
@@ -700,7 +707,7 @@ func (m Model) detailContent() string {
 
 	case tabMCP:
 		if c >= len(m.st.MCPServers) {
-			return styleMuted.Render("no MCP servers configured")
+			return emptyState("no MCP servers configured")
 		}
 		srv := m.st.MCPServers[c]
 		lines := []string{
@@ -731,7 +738,7 @@ func (m Model) detailContent() string {
 			sel++
 		}
 		if memIdx < 0 || memIdx >= len(m.st.Memory) {
-			return styleMuted.Render("no memory entries")
+			return emptyState("no memory entries")
 		}
 		e := m.st.Memory[memIdx]
 		name := e.Name
