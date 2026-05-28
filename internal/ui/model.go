@@ -38,10 +38,14 @@ type clearStatusMsg struct{}
 
 // rowItem separates the styled indicator from the plain label so truncation
 // operates only on plain bytes (no ANSI escape codes).
+// isHeader marks non-selectable group header rows; dataIdx is an optional
+// index into the backing slice (used by tabMemory to map cursor → entry).
 type rowItem struct {
-	ind   string // already-styled indicator rune, e.g. styleGreen.Render("●")
-	indW  int    // visual width of ind (typically 1)
-	label string // plain text; safe to truncate with len()
+	ind      string
+	indW     int
+	label    string
+	isHeader bool
+	dataIdx  int
 }
 
 type Model struct {
@@ -180,8 +184,6 @@ func (m Model) renderHeader() string {
 func (m Model) renderList() string {
 	rows := m.listRows()
 	cursor := m.cursors[m.tab]
-	// listInner is the content width inside the rounded border (border itself adds 2).
-	// listOuter = listInner + 2 = m.listOuter().
 	listInner := m.listOuter() - 2
 	bodyH := m.panelH()
 
@@ -189,27 +191,45 @@ func (m Model) renderList() string {
 	const prefixW = 3
 	labelW := listInner - prefixW
 
-	start := max(0, cursor-bodyH+1)
+	// For tabs with headers, map cursor (Nth selectable) to a visual row index.
+	cursorVisIdx := cursor // default: cursor == visual index (no headers)
+	if m.tab == tabMemory {
+		sel := 0
+		for i, r := range rows {
+			if r.isHeader {
+				continue
+			}
+			if sel == cursor {
+				cursorVisIdx = i
+				break
+			}
+			sel++
+		}
+	}
+
+	start := max(0, cursorVisIdx-bodyH+1)
 	end := min(start+bodyH, len(rows))
 
 	var lines []string
 	for i := start; i < end; i++ {
 		r := rows[i]
-		label := truncate(r.label, labelW)
 		var line string
-		if i == cursor {
-			// ▶ cursor, no full-row background — avoids lighting up trailing whitespace
+		if r.isHeader {
+			// Project group header: muted, no cursor indicator, indented label.
+			label := truncate(r.label, listInner-2)
+			line = styleMuted.Render(" " + label)
+		} else if i == cursorVisIdx {
+			label := truncate(r.label, labelW)
 			line = stylePrimary.Render("▶") + r.ind + " " + styleSelected.Render(label)
 		} else {
+			label := truncate(r.label, labelW)
 			line = " " + r.ind + " " + label
 		}
-		// Width fills the inner border width so every row is the same length.
 		lines = append(lines, styleNormal.Width(listInner).Render(line))
 	}
 	if len(lines) == 0 {
 		lines = []string{styleMuted.Render(" (none)")}
 	}
-	// Width(listInner): lipgloss v1.x Width is inner content; border adds 2 → outer = listOuter.
 	return styleBorder.Width(listInner).Height(bodyH).Render(strings.Join(lines, "\n"))
 }
 
@@ -288,8 +308,14 @@ func (m Model) listRows() []rowItem {
 		}
 		return rows
 	case tabMemory:
-		rows := make([]rowItem, len(m.st.Memory))
+		var rows []rowItem
+		lastProj := ""
 		for i, e := range m.st.Memory {
+			proj := projectLabel(e.Project)
+			if proj != lastProj {
+				rows = append(rows, rowItem{isHeader: true, label: proj, dataIdx: -1})
+				lastProj = proj
+			}
 			name := e.Name
 			if name == "" {
 				name = strings.TrimSuffix(e.File, ".md")
@@ -298,14 +324,32 @@ func (m Model) listRows() []rowItem {
 			if t == "" {
 				t = "·"
 			}
-			rows[i] = rowItem{ind: styleMuted.Render(string([]rune(t)[0])), indW: 1, label: name}
+			rows = append(rows, rowItem{
+				ind:     styleMuted.Render(string([]rune(t)[0])),
+				indW:    1,
+				label:   name,
+				dataIdx: i,
+			})
 		}
 		return rows
 	}
 	return nil
 }
 
-func (m Model) listLen() int { return len(m.listRows()) }
+func (m Model) listLen() int {
+	rows := m.listRows()
+	if m.tab != tabMemory {
+		return len(rows)
+	}
+	// For memory, cursor only lands on selectable (non-header) rows.
+	n := 0
+	for _, r := range rows {
+		if !r.isHeader {
+			n++
+		}
+	}
+	return n
+}
 
 // ── detail content ────────────────────────────────────────────────────────────
 
@@ -413,10 +457,23 @@ func (m Model) detailContent() string {
 		return strings.Join(lines, "\n")
 
 	case tabMemory:
-		if c >= len(m.st.Memory) {
+		// Map cursor (Nth selectable row) to the memory entry via dataIdx.
+		memIdx := -1
+		sel := 0
+		for _, row := range m.listRows() {
+			if row.isHeader {
+				continue
+			}
+			if sel == c {
+				memIdx = row.dataIdx
+				break
+			}
+			sel++
+		}
+		if memIdx < 0 || memIdx >= len(m.st.Memory) {
 			return styleMuted.Render("no memory entries")
 		}
-		e := m.st.Memory[c]
+		e := m.st.Memory[memIdx]
 		name := e.Name
 		if name == "" {
 			name = strings.TrimSuffix(e.File, ".md")
