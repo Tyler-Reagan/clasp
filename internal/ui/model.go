@@ -85,12 +85,10 @@ func New() (*Model, error) {
 		help:    help.New(),
 		keys:    defaultKeys(),
 	}
-	// Bindings that aren't wired yet are hidden from help. They'll be
-	// re-enabled by their respective tasks (#13 zoom, #14 help).
-	m.keys.Zoom.SetEnabled(false)
-	m.keys.UnZoom.SetEnabled(false)
+	// Help is still hidden until the ? overlay lands in task #14.
 	m.keys.Help.SetEnabled(false)
-	m.keys.Toggle.SetEnabled(false) // off on Sessions tab; gets re-enabled on Plugins
+	// Zoom/UnZoom/Toggle enabled state depends on current focus and tab.
+	m.refreshBindings()
 	return m, nil
 }
 
@@ -139,11 +137,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg { return RefreshMsg{} }
 		}
 
-		// Focus-specific dispatch. Only focusList is wired this commit;
-		// focusZoomedDetail handler arrives in task #13.
+		// Focus-specific dispatch.
 		switch m.focus {
 		case focusList:
 			return m.updateList(msg)
+		case focusZoomedDetail:
+			return m.updateZoom(msg)
 		}
 	}
 	return m, nil
@@ -167,14 +166,14 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.NextTab):
 		m.tab = (m.tab + 1) % tabCount
 		m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
-		m.keys.Toggle.SetEnabled(m.tab == tabPlugins)
+		m.refreshBindings()
 		m.detail.GotoTop()
 		m.detail.SetContent(m.detailContent())
 		return m, func() tea.Msg { return RefreshMsg{} }
 	case key.Matches(msg, m.keys.PrevTab):
 		m.tab = (m.tab - 1 + tabCount) % tabCount
 		m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
-		m.keys.Toggle.SetEnabled(m.tab == tabPlugins)
+		m.refreshBindings()
 		m.detail.GotoTop()
 		m.detail.SetContent(m.detailContent())
 		return m, func() tea.Msg { return RefreshMsg{} }
@@ -217,8 +216,88 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.ScrollPageUp):
 		m.detail.PageUp()
 		return m, nil
+	case key.Matches(msg, m.keys.Zoom):
+		m.focus = focusZoomedDetail
+		m.refreshBindings()
+		m.resizeDetail()
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, nil
 	}
 	return m, nil
+}
+
+func (m Model) updateZoom(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// gg chord (top-of-detail in zoom mode).
+	switch m.vimG.step(msg.String()) {
+	case gWait:
+		return m, nil
+	case gTop:
+		m.detail.GotoTop()
+		return m, nil
+	}
+
+	switch {
+	case key.Matches(msg, m.keys.UnZoom):
+		m.focus = focusList
+		m.refreshBindings()
+		m.resizeDetail()
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, nil
+	case key.Matches(msg, m.keys.NextTab), key.Matches(msg, m.keys.PrevTab):
+		// Forgiving Tab: exit zoom AND switch tab, landing in browse on the new tab.
+		m.focus = focusList
+		if key.Matches(msg, m.keys.NextTab) {
+			m.tab = (m.tab + 1) % tabCount
+		} else {
+			m.tab = (m.tab - 1 + tabCount) % tabCount
+		}
+		m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
+		m.refreshBindings()
+		m.resizeDetail()
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, func() tea.Msg { return RefreshMsg{} }
+	case key.Matches(msg, m.keys.Up):
+		m.detail.LineUp(1)
+		return m, nil
+	case key.Matches(msg, m.keys.Down):
+		m.detail.LineDown(1)
+		return m, nil
+	case key.Matches(msg, m.keys.End):
+		m.detail.GotoBottom()
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollDown):
+		m.detail.HalfPageDown()
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollUp):
+		m.detail.HalfPageUp()
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollPageDown):
+		m.detail.PageDown()
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollPageUp):
+		m.detail.PageUp()
+		return m, nil
+	}
+	return m, nil
+}
+
+// refreshBindings updates per-binding Enabled state based on the current
+// focus and tab. Called whenever those change so help.Model only shows
+// the keys that actually fire in the current context.
+func (m *Model) refreshBindings() {
+	m.keys.Zoom.SetEnabled(m.focus == focusList)
+	m.keys.UnZoom.SetEnabled(m.focus == focusZoomedDetail)
+	m.keys.Toggle.SetEnabled(m.focus == focusList && m.tab == tabPlugins)
+}
+
+// resizeDetail re-applies viewport dimensions after a focus change.
+// Zoom mode gives the detail viewport the full terminal width.
+func (m *Model) resizeDetail() {
+	vw, vh := m.viewportDims()
+	m.detail.Width, m.detail.Height = vw, vh
 }
 
 func (m Model) View() string {
@@ -226,13 +305,18 @@ func (m Model) View() string {
 		return "loading..."
 	}
 	sep := styleMuted.Render(strings.Repeat("─", m.width))
+
+	var body string
+	if m.focus == focusZoomedDetail {
+		body = m.renderDetail()
+	} else {
+		body = lipgloss.JoinHorizontal(lipgloss.Top, m.renderList(), m.renderDetail())
+	}
+
 	return lipgloss.JoinVertical(lipgloss.Left,
 		m.renderHeader(),
 		sep,
-		lipgloss.JoinHorizontal(lipgloss.Top,
-			m.renderList(),
-			m.renderDetail(),
-		),
+		body,
 		m.renderStatus(),
 	)
 }
@@ -243,7 +327,14 @@ func (m Model) renderHeader() string {
 	var tabs []string
 	for i, name := range tabNames {
 		if tab(i) == m.tab {
-			tabs = append(tabs, styleTabActive.Render(name))
+			label := name
+			// Zoom mode bracket marker — signals that tabs are still reachable
+			// (Tab/h/l forgivingly exits zoom and switches) without losing the
+			// visual cue of which collection you're zoomed into.
+			if m.focus == focusZoomedDetail {
+				label = "[" + name + "]"
+			}
+			tabs = append(tabs, styleTabActive.Render(label))
 		} else {
 			tabs = append(tabs, styleTabInactive.Render(name))
 		}
@@ -574,7 +665,12 @@ func (m Model) panelH() int { return max(1, m.height-5) }
 // detailOuterDims returns the OUTER width and the INNER height of the detail pane.
 // (Asymmetric because the width minus listOuter is what's available; the height comes
 // from panelH which is already inner. Callers compute innerW = outerW - 2 when needed.)
+//
+// In zoom mode the detail pane fills the full terminal width — no list panel.
 func (m Model) detailOuterDims() (outerW, innerH int) {
+	if m.focus == focusZoomedDetail {
+		return m.width, m.panelH()
+	}
 	return m.width - m.listOuter(), m.panelH()
 }
 
