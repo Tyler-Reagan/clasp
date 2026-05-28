@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
@@ -26,6 +28,16 @@ const (
 )
 
 var tabNames = [tabCount]string{"Sessions", "Skills", "Plugins", "MCP", "Memory"}
+
+// focus is the active interaction surface. The Update dispatcher routes keys
+// based on focus after handling any modal overlays (e.g. ? help — wired in
+// task #14) and globally-available keys.
+type focus int
+
+const (
+	focusList         focus = iota // List + detail side-by-side (browse mode).
+	focusZoomedDetail              // Detail full-screen (wired in task #13).
+)
 
 type RefreshMsg struct{}
 
@@ -52,17 +64,37 @@ type Model struct {
 	st        *state.State
 	loadErr   error
 	tab       tab
+	focus     focus
 	cursors   [tabCount]int
 	width     int
 	height    int
 	detail    viewport.Model
+	help      help.Model
+	keys      keyMap
 	ready     bool
 	statusMsg string // transient feedback shown in the status bar
 }
 
 func New() (*Model, error) {
 	st, err := state.Load()
-	return &Model{st: st, loadErr: err}, nil
+	m := &Model{
+		st:      st,
+		loadErr: err,
+		focus:   focusList,
+		help:    help.New(),
+		keys:    defaultKeys(),
+	}
+	// Bindings that aren't wired yet are hidden from help. They'll be
+	// re-enabled by their respective tasks (#11 scroll, #13 zoom, #14 help).
+	m.keys.ScrollDown.SetEnabled(false)
+	m.keys.ScrollUp.SetEnabled(false)
+	m.keys.ScrollPageDown.SetEnabled(false)
+	m.keys.ScrollPageUp.SetEnabled(false)
+	m.keys.Zoom.SetEnabled(false)
+	m.keys.UnZoom.SetEnabled(false)
+	m.keys.Help.SetEnabled(false)
+	m.keys.Toggle.SetEnabled(false) // off on Sessions tab; gets re-enabled on Plugins
+	return m, nil
 }
 
 func (m Model) Init() tea.Cmd { return nil }
@@ -78,6 +110,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.detail.Width, m.detail.Height = vw, vh
 		}
+		m.help.Width = m.width
 		m.detail.SetContent(m.detailContent())
 		return m, nil
 
@@ -100,62 +133,80 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
+		// Global keys: handled regardless of focus or future overlays.
+		// (Modal overlays — e.g. ? help — gain priority above this layer in task #14.)
+		switch {
+		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
-		case "tab", "l":
-			m.tab = (m.tab + 1) % tabCount
-			m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
-			m.detail.GotoTop()
-			m.detail.SetContent(m.detailContent())
+		case key.Matches(msg, m.keys.Refresh):
 			return m, func() tea.Msg { return RefreshMsg{} }
-		case "shift+tab", "h":
-			m.tab = (m.tab - 1 + tabCount) % tabCount
-			m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
-			m.detail.GotoTop()
-			m.detail.SetContent(m.detailContent())
-			return m, func() tea.Msg { return RefreshMsg{} }
-		case "up", "k":
-			if m.cursors[m.tab] > 0 {
-				m.cursors[m.tab]--
-				m.detail.GotoTop()
-				m.detail.SetContent(m.detailContent())
-			}
-			return m, nil
-		case "down", "j":
-			if m.cursors[m.tab] < m.listLen()-1 {
-				m.cursors[m.tab]++
-				m.detail.GotoTop()
-				m.detail.SetContent(m.detailContent())
-			}
-			return m, nil
-		case "g":
-			m.cursors[m.tab] = 0
-			m.detail.GotoTop()
-			m.detail.SetContent(m.detailContent())
-			return m, nil
-		case "G":
-			m.cursors[m.tab] = max(0, m.listLen()-1)
-			m.detail.GotoTop()
-			m.detail.SetContent(m.detailContent())
-			return m, nil
-		case "r":
-			return m, func() tea.Msg { return RefreshMsg{} }
-		case " ":
-			if m.tab == tabPlugins && m.st != nil {
-				c := m.cursors[m.tab]
-				if c < len(m.st.Plugins) {
-					id := m.st.Plugins[c].ID
-					return m, pluginToggleCmd(id)
-				}
-			}
 		}
-		// pass remaining keys (PgUp/PgDn/etc.) to detail viewport
-		var cmd tea.Cmd
-		m.detail, cmd = m.detail.Update(msg)
-		return m, cmd
+
+		// Focus-specific dispatch. Only focusList is wired this commit;
+		// focusZoomedDetail handler arrives in task #13.
+		switch m.focus {
+		case focusList:
+			return m.updateList(msg)
+		}
 	}
 	return m, nil
+}
+
+func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.NextTab):
+		m.tab = (m.tab + 1) % tabCount
+		m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
+		m.keys.Toggle.SetEnabled(m.tab == tabPlugins)
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, func() tea.Msg { return RefreshMsg{} }
+	case key.Matches(msg, m.keys.PrevTab):
+		m.tab = (m.tab - 1 + tabCount) % tabCount
+		m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
+		m.keys.Toggle.SetEnabled(m.tab == tabPlugins)
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, func() tea.Msg { return RefreshMsg{} }
+	case key.Matches(msg, m.keys.Up):
+		if m.cursors[m.tab] > 0 {
+			m.cursors[m.tab]--
+			m.detail.GotoTop()
+			m.detail.SetContent(m.detailContent())
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Down):
+		if m.cursors[m.tab] < m.listLen()-1 {
+			m.cursors[m.tab]++
+			m.detail.GotoTop()
+			m.detail.SetContent(m.detailContent())
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Top):
+		m.cursors[m.tab] = 0
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, nil
+	case key.Matches(msg, m.keys.End):
+		m.cursors[m.tab] = max(0, m.listLen()-1)
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, nil
+	case key.Matches(msg, m.keys.Toggle):
+		if m.tab == tabPlugins && m.st != nil {
+			c := m.cursors[m.tab]
+			if c < len(m.st.Plugins) {
+				return m, pluginToggleCmd(m.st.Plugins[c].ID)
+			}
+		}
+		return m, nil
+	}
+
+	// Pass remaining keys (PgUp/PgDn etc.) to the detail viewport.
+	// This fallthrough is removed in task #11 once Ctrl+D/U/F/B are wired.
+	var cmd tea.Cmd
+	m.detail, cmd = m.detail.Update(msg)
+	return m, cmd
 }
 
 func (m Model) View() string {
@@ -258,19 +309,7 @@ func (m Model) renderStatus() string {
 		right = styleYellow.Render("warn: " + m.loadErr.Error())
 	}
 
-	hints := []hintPair{
-		{"↑↓/jk", "list"},
-		{"g/G", "top/end"},
-		{"hl/tab", "switch"},
-		{"PgUp/Dn", "scroll"},
-		{"r", "refresh"},
-	}
-	if m.tab == tabPlugins {
-		hints = append(hints, hintPair{"space", "toggle"})
-	}
-	hints = append(hints, hintPair{"q", "quit"})
-
-	hint := renderHints(hints)
+	hint := m.help.View(m.keys)
 	pad := max(0, m.width-2-lipgloss.Width(hint)-lipgloss.Width(right))
 	bar := hint + strings.Repeat(" ", pad) + right
 
@@ -279,17 +318,6 @@ func (m Model) renderStatus() string {
 		Width(m.width).
 		Padding(0, 1).
 		Render(bar)
-}
-
-type hintPair struct{ key, desc string }
-
-func renderHints(pairs []hintPair) string {
-	sep := styleMuted.Render("  ·  ")
-	parts := make([]string, len(pairs))
-	for i, p := range pairs {
-		parts[i] = styleKey.Render(p.key) + styleMuted.Render(" "+p.desc)
-	}
-	return strings.Join(parts, sep)
 }
 
 // ── list rows ─────────────────────────────────────────────────────────────────
