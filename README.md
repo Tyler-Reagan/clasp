@@ -32,7 +32,7 @@ Claude Code's slash commands are powerful but disruptive mid-conversation. clasp
 
 ## Requirements
 
-- Go 1.21+
+- Go 1.24+
 - [Claude Code](https://claude.ai/code) installed (provides `~/.claude` state)
 - A terminal that supports 256 colors
 
