@@ -107,8 +107,8 @@ clasp/
 - [x] Memory tab — all project memory entries with full body
 - [x] fsnotify live refresh on any `~/.claude` change
 
-**Milestone 2 — first write action**
-- [ ] Toggle a plugin or MCP server on/off (modifies `~/.claude/settings.json`)
+**Milestone 2 — first write action** ✓ _(current)_
+- [x] Toggle a plugin on/off with `space` in the Plugins tab (modifies `~/.claude/settings.json`)
 
 **Later**
 - [ ] MCP server status panel
