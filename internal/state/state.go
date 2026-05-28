@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 type Session struct {
@@ -17,14 +18,13 @@ type Session struct {
 	StartedAt int64  `json:"startedAt"`
 }
 
-type SkillMeta struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Version     string `json:"version"`
-}
-
 type Skill struct {
-	SkillMeta
+	Name        string
+	Description string    // SKILL.md frontmatter description:
+	SourcePath  string    // actual path on disk — resolved target if symlink, directory path otherwise
+	LineCount   int       // total lines in SKILL.md
+	ModTime     time.Time // SKILL.md mtime
+	BodyPreview string    // first paragraph of SKILL.md body
 }
 
 type PluginInstall struct {
@@ -134,23 +134,133 @@ func loadSkills(dir string, s *State) error {
 	for _, e := range entries {
 		name := e.Name()
 		skillPath := filepath.Join(dir, "skills", name)
-		// Use os.Stat to follow symlinks — IsDir() on a DirEntry returns false for symlinked dirs.
+		// os.Stat follows symlinks; DirEntry.IsDir() does not.
 		fi, err := os.Stat(skillPath)
 		if err != nil || !fi.IsDir() {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(skillPath, "meta.json"))
-		if err != nil {
-			s.Skills = append(s.Skills, Skill{SkillMeta{Name: name}})
-			continue
-		}
-		var meta SkillMeta
-		if json.Unmarshal(data, &meta) != nil {
-			meta.Name = name
-		}
-		s.Skills = append(s.Skills, Skill{meta})
+		s.Skills = append(s.Skills, loadSkill(name, skillPath))
 	}
 	return nil
+}
+
+func loadSkill(name, skillPath string) Skill {
+	sk := Skill{Name: name}
+
+	// Resolve the actual location on disk — target if symlink, directory itself otherwise.
+	if resolved, err := filepath.EvalSymlinks(skillPath); err == nil {
+		sk.SourcePath = resolved
+	} else {
+		sk.SourcePath = skillPath
+	}
+
+	skillMD := filepath.Join(sk.SourcePath, "SKILL.md")
+	data, err := os.ReadFile(skillMD)
+	if err != nil {
+		return sk
+	}
+
+	fi, err := os.Stat(skillMD)
+	if err == nil {
+		sk.ModTime = fi.ModTime()
+	}
+	sk.LineCount = strings.Count(string(data), "\n") + 1
+
+	sk.Name, sk.Description, sk.BodyPreview = parseSkillMD(string(data))
+	if sk.Name == "" {
+		sk.Name = name
+	}
+	return sk
+}
+
+// parseSkillMD parses a SKILL.md file into its frontmatter fields and a body preview.
+// Handles both inline description values and YAML block scalars (> and |).
+func parseSkillMD(content string) (name, description, bodyPreview string) {
+	content = strings.TrimSpace(content)
+	if !strings.HasPrefix(content, "---") {
+		bodyPreview = firstParagraph(content)
+		return
+	}
+	// Strip the opening ---
+	rest := strings.TrimPrefix(content[3:], "\n")
+	end := strings.Index(rest, "\n---")
+	if end < 0 {
+		bodyPreview = firstParagraph(content)
+		return
+	}
+	frontmatter := rest[:end]
+	body := strings.TrimSpace(rest[end+4:])
+	bodyPreview = firstParagraph(body)
+
+	lines := strings.Split(frontmatter, "\n")
+	for i := 0; i < len(lines); {
+		k, v, ok := strings.Cut(lines[i], ":")
+		if !ok {
+			i++
+			continue
+		}
+		k = strings.TrimSpace(k)
+		v = strings.TrimSpace(v)
+		if v == ">" || v == "|" {
+			// YAML block scalar: collect indented lines that follow.
+			folded := v == ">"
+			var sb strings.Builder
+			i++
+			for i < len(lines) {
+				l := lines[i]
+				if !strings.HasPrefix(l, " ") && !strings.HasPrefix(l, "\t") {
+					break
+				}
+				if sb.Len() > 0 {
+					if folded {
+						sb.WriteRune(' ')
+					} else {
+						sb.WriteRune('\n')
+					}
+				}
+				sb.WriteString(strings.TrimSpace(l))
+				i++
+			}
+			v = sb.String()
+		} else {
+			i++
+		}
+		switch k {
+		case "name":
+			name = v
+		case "description":
+			description = v
+		}
+	}
+	return
+}
+
+// firstParagraph returns the first non-empty paragraph (up to the first blank line),
+// stripping leading markdown heading markers. Appends … if truncated at the line cap.
+func firstParagraph(body string) string {
+	const cap = 5
+	var lines []string
+	hitCap := false
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimLeft(line, "#")
+		line = strings.TrimSpace(line)
+		if line == "" {
+			if len(lines) > 0 {
+				break
+			}
+			continue
+		}
+		lines = append(lines, line)
+		if len(lines) == cap {
+			hitCap = true
+			break
+		}
+	}
+	out := strings.Join(lines, " ")
+	if hitCap {
+		out += "…"
+	}
+	return out
 }
 
 func loadPlugins(dir string, s *State) error {

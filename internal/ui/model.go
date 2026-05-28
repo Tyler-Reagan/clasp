@@ -335,11 +335,22 @@ func (m Model) detailContent() string {
 			return styleMuted.Render("no skills installed")
 		}
 		sk := m.st.Skills[c]
-		lines := []string{
-			styleDetailTitle.Render(sk.Name),
-			"",
-			kvWrap("Description", sk.Description, m.detail.Width),
-			kv("Version", sk.Version),
+		lines := []string{styleDetailTitle.Render(sk.Name), ""}
+		if sk.Description != "" {
+			lines = append(lines, kvWrap("Description", sk.Description, m.detail.Width))
+		}
+		if sk.BodyPreview != "" {
+			lines = append(lines, kvWrap("Preview", sk.BodyPreview, m.detail.Width))
+		}
+		lines = append(lines, "")
+		if sk.SourcePath != "" {
+			lines = append(lines, kv("Path", shortPath(sk.SourcePath)))
+		}
+		if sk.LineCount > 0 {
+			lines = append(lines, kv("Lines", fmt.Sprintf("%d", sk.LineCount)))
+		}
+		if !sk.ModTime.IsZero() {
+			lines = append(lines, kv("Modified", sk.ModTime.Format("2006-01-02 15:04")))
 		}
 		return strings.Join(lines, "\n")
 
