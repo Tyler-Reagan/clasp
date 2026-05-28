@@ -85,11 +85,7 @@ func New() (*Model, error) {
 		keys:    defaultKeys(),
 	}
 	// Bindings that aren't wired yet are hidden from help. They'll be
-	// re-enabled by their respective tasks (#11 scroll, #13 zoom, #14 help).
-	m.keys.ScrollDown.SetEnabled(false)
-	m.keys.ScrollUp.SetEnabled(false)
-	m.keys.ScrollPageDown.SetEnabled(false)
-	m.keys.ScrollPageUp.SetEnabled(false)
+	// re-enabled by their respective tasks (#13 zoom, #14 help).
 	m.keys.Zoom.SetEnabled(false)
 	m.keys.UnZoom.SetEnabled(false)
 	m.keys.Help.SetEnabled(false)
@@ -200,13 +196,20 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case key.Matches(msg, m.keys.ScrollDown):
+		m.detail.HalfPageDown()
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollUp):
+		m.detail.HalfPageUp()
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollPageDown):
+		m.detail.PageDown()
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollPageUp):
+		m.detail.PageUp()
+		return m, nil
 	}
-
-	// Pass remaining keys (PgUp/PgDn etc.) to the detail viewport.
-	// This fallthrough is removed in task #11 once Ctrl+D/U/F/B are wired.
-	var cmd tea.Cmd
-	m.detail, cmd = m.detail.Update(msg)
-	return m, cmd
+	return m, nil
 }
 
 func (m Model) View() string {
