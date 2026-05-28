@@ -17,11 +17,28 @@ func TogglePlugin(id string) error {
 		return err
 	}
 
-	// use raw message map so unknown fields survive the round-trip
+	out, err := toggleEnabledPlugin(data, id)
+	if err != nil {
+		return err
+	}
+
+	// atomic write: temp file + rename avoids partial writes
+	tmp := path + ".clasp.tmp"
+	if err := os.WriteFile(tmp, out, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// toggleEnabledPlugin is the pure JSON manipulation behind TogglePlugin.
+// Given the current settings.json bytes (or nil/empty), flip the enabled state
+// of id and return the new bytes. Unknown top-level fields are preserved verbatim
+// thanks to the json.RawMessage round-trip.
+func toggleEnabledPlugin(data []byte, id string) ([]byte, error) {
 	raw := map[string]json.RawMessage{}
 	if len(data) > 0 {
 		if err := json.Unmarshal(data, &raw); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -38,19 +55,9 @@ func TogglePlugin(id string) error {
 
 	epBytes, err := json.Marshal(enabled)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	raw["enabledPlugins"] = json.RawMessage(epBytes)
 
-	out, err := json.MarshalIndent(raw, "", "    ")
-	if err != nil {
-		return err
-	}
-
-	// atomic write: temp file + rename avoids partial writes
-	tmp := path + ".clasp.tmp"
-	if err := os.WriteFile(tmp, out, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return json.MarshalIndent(raw, "", "    ")
 }
