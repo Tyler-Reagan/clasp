@@ -11,7 +11,6 @@ var (
 	colorText    = lipgloss.Color("#cdd6f4")
 	colorBorder  = lipgloss.Color("#313244")
 	colorActive  = lipgloss.Color("#89b4fa")
-	colorSel     = lipgloss.Color("#45475a")
 
 	styleTitle = lipgloss.NewStyle().
 			Bold(true).
@@ -28,16 +27,16 @@ var (
 				Foreground(colorMuted).
 				Padding(0, 1)
 
-	styleSelected = lipgloss.NewStyle().
-			Background(colorSel).
-			Foreground(colorText).
-			Bold(true)
+	// styleSelected styles the label of the cursor row — no background fill so
+	// trailing whitespace in the list column is not highlighted.
+	styleSelected = lipgloss.NewStyle().Bold(true).Foreground(colorText)
 
-	styleNormal = lipgloss.NewStyle().Foreground(colorText)
-	styleMuted  = lipgloss.NewStyle().Foreground(colorMuted)
-	styleGreen  = lipgloss.NewStyle().Foreground(colorGreen)
-	styleYellow = lipgloss.NewStyle().Foreground(colorYellow)
-	styleRed    = lipgloss.NewStyle().Foreground(colorRed)
+	styleNormal  = lipgloss.NewStyle().Foreground(colorText)
+	styleMuted   = lipgloss.NewStyle().Foreground(colorMuted)
+	stylePrimary = lipgloss.NewStyle().Foreground(colorPrimary)
+	styleGreen   = lipgloss.NewStyle().Foreground(colorGreen)
+	styleYellow  = lipgloss.NewStyle().Foreground(colorYellow)
+	styleRed     = lipgloss.NewStyle().Foreground(colorRed)
 
 	styleBorder = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).

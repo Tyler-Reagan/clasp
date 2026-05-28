@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
+	glamourstyles "github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/tylerreagan/clasp/internal/state"
 )
@@ -19,11 +20,12 @@ const (
 	tabSessions tab = iota
 	tabSkills
 	tabPlugins
+	tabMCP
 	tabMemory
 	tabCount
 )
 
-var tabNames = [tabCount]string{"Sessions", "Skills", "Plugins", "Memory"}
+var tabNames = [tabCount]string{"Sessions", "Skills", "Plugins", "MCP", "Memory"}
 
 type RefreshMsg struct{}
 
@@ -178,9 +180,14 @@ func (m Model) renderHeader() string {
 func (m Model) renderList() string {
 	rows := m.listRows()
 	cursor := m.cursors[m.tab]
-	lw := m.listWidth()
-	contentW := lw - 2 // border steals 2
+	// listInner is the content width inside the rounded border (border itself adds 2).
+	// listOuter = listInner + 2 = m.listOuter().
+	listInner := m.listOuter() - 2
 	bodyH := m.panelH()
+
+	// row prefix: cursor-indicator (1) + type-indicator (1) + space (1) = 3 chars
+	const prefixW = 3
+	labelW := listInner - prefixW
 
 	start := max(0, cursor-bodyH+1)
 	end := min(start+bodyH, len(rows))
@@ -188,28 +195,30 @@ func (m Model) renderList() string {
 	var lines []string
 	for i := start; i < end; i++ {
 		r := rows[i]
-		// 1 left-pad + indicator + 1 space + label
-		prefix := " " + r.ind + " "
-		prefixVisW := 1 + r.indW + 1
-		label := truncate(r.label, contentW-prefixVisW)
-		line := prefix + label
+		label := truncate(r.label, labelW)
+		var line string
 		if i == cursor {
-			lines = append(lines, styleSelected.Width(contentW).Render(line))
+			// ▶ cursor, no full-row background — avoids lighting up trailing whitespace
+			line = stylePrimary.Render("▶") + r.ind + " " + styleSelected.Render(label)
 		} else {
-			lines = append(lines, styleNormal.Width(contentW).Render(line))
+			line = " " + r.ind + " " + label
 		}
+		// Width fills the inner border width so every row is the same length.
+		lines = append(lines, styleNormal.Width(listInner).Render(line))
 	}
 	if len(lines) == 0 {
 		lines = []string{styleMuted.Render(" (none)")}
 	}
-	return styleBorder.Width(lw).Height(bodyH).Render(strings.Join(lines, "\n"))
+	// Width(listInner): lipgloss v1.x Width is inner content; border adds 2 → outer = listOuter.
+	return styleBorder.Width(listInner).Height(bodyH).Render(strings.Join(lines, "\n"))
 }
 
 func (m Model) renderDetail() string {
-	dw, dh := m.detailOuterDims()
-	// 1-char padding on each side inside the border
+	outerW, outerH := m.detailOuterDims()
+	innerW := outerW - 2 // border adds 2
+	innerH := outerH     // Height() is inner in lipgloss v1.x; outer = innerH+2 but outerH already accounts for that — see panelH comment
 	padded := lipgloss.NewStyle().Padding(0, 1).Render(m.detail.View())
-	return styleBorder.Width(dw).Height(dh).Render(padded)
+	return styleBorder.Width(innerW).Height(innerH).Render(padded)
 }
 
 func (m Model) renderStatus() string {
@@ -217,11 +226,11 @@ func (m Model) renderStatus() string {
 	if m.statusMsg != "" {
 		right = m.statusMsg
 	} else if m.loadErr != nil {
-		right = styleYellow.Render("⚠ " + m.loadErr.Error())
+		right = styleYellow.Render("warn: " + m.loadErr.Error())
 	}
 
-	hint := styleKey.Render("↑↓/jk") + styleMuted.Render(" nav  ") +
-		styleKey.Render("tab/hl") + styleMuted.Render(" switch  ") +
+	hint := styleKey.Render("jk") + styleMuted.Render(" nav  ") +
+		styleKey.Render("hl/tab") + styleMuted.Render(" switch  ") +
 		styleKey.Render("PgUp/Dn") + styleMuted.Render(" scroll  ") +
 		styleKey.Render("r") + styleMuted.Render(" refresh  ") +
 		styleKey.Render("q") + styleMuted.Render(" quit")
@@ -272,6 +281,12 @@ func (m Model) listRows() []rowItem {
 			rows[i] = rowItem{ind: dot, indW: 1, label: pluginShortName(p.ID)}
 		}
 		return rows
+	case tabMCP:
+		rows := make([]rowItem, len(m.st.MCPServers))
+		for i, srv := range m.st.MCPServers {
+			rows[i] = rowItem{ind: stylePrimary.Render("◈"), indW: 1, label: srv.Name}
+		}
+		return rows
 	case tabMemory:
 		rows := make([]rowItem, len(m.st.Memory))
 		for i, e := range m.st.Memory {
@@ -283,7 +298,7 @@ func (m Model) listRows() []rowItem {
 			if t == "" {
 				t = "·"
 			}
-			rows[i] = rowItem{ind: styleMuted.Render(t[:1]), indW: 1, label: name}
+			rows[i] = rowItem{ind: styleMuted.Render(string([]rune(t)[0])), indW: 1, label: name}
 		}
 		return rows
 	}
@@ -320,12 +335,13 @@ func (m Model) detailContent() string {
 			return styleMuted.Render("no skills installed")
 		}
 		sk := m.st.Skills[c]
-		return strings.Join([]string{
+		lines := []string{
 			styleDetailTitle.Render(sk.Name),
 			"",
-			kv("Description", sk.Description),
+			kvWrap("Description", sk.Description, m.detail.Width),
 			kv("Version", sk.Version),
-		}, "\n")
+		}
+		return strings.Join(lines, "\n")
 
 	case tabPlugins:
 		if c >= len(m.st.Plugins) {
@@ -336,14 +352,46 @@ func (m Model) detailContent() string {
 		if p.Enabled {
 			statusStr = styleGreen.Render("enabled")
 		}
-		return strings.Join([]string{
-			styleDetailTitle.Render(p.ID),
+		lines := []string{
+			styleDetailTitle.Render(pluginShortName(p.ID)),
 			"",
+			kv("ID", p.ID),
 			kv("Version", p.Version()),
-			"Status:  " + statusStr,
+			fmt.Sprintf("%-12s", "Status:") + "  " + statusStr,
 			kv("Scope", p.Scope()),
 			kv("Installed", p.InstalledAt()),
-		}, "\n")
+		}
+		if len(p.MCPServers) > 0 {
+			lines = append(lines, "", styleMuted.Render("MCP Servers"))
+			for _, srv := range p.MCPServers {
+				lines = append(lines, "  "+styleMuted.Render("·")+" "+srv.Name)
+			}
+		}
+		if len(p.SkillNames) > 0 {
+			lines = append(lines, "", styleMuted.Render("Skills"))
+			for _, sk := range p.SkillNames {
+				lines = append(lines, "  "+styleMuted.Render("·")+" "+sk)
+			}
+		}
+		return strings.Join(lines, "\n")
+
+	case tabMCP:
+		if c >= len(m.st.MCPServers) {
+			return styleMuted.Render("no MCP servers configured")
+		}
+		srv := m.st.MCPServers[c]
+		lines := []string{
+			styleDetailTitle.Render(srv.Name),
+			"",
+			kv("Type", srv.Type),
+		}
+		if srv.URL != "" {
+			lines = append(lines, kv("URL", srv.URL))
+		}
+		if srv.Plugin != "" {
+			lines = append(lines, kv("Plugin", pluginShortName(srv.Plugin)))
+		}
+		return strings.Join(lines, "\n")
 
 	case tabMemory:
 		if c >= len(m.st.Memory) {
@@ -360,33 +408,103 @@ func (m Model) detailContent() string {
 			kv("Type", e.Type),
 			kv("File", e.File),
 			kv("Project", projectLabel(e.Project)),
-			"",
 		}, "\n")
-		return header + renderMarkdown(e.Body, m.detail.Width)
+		if e.Body == "" {
+			return header
+		}
+		return header + "\n" + styleMuted.Render(strings.Repeat("─", m.detail.Width)) + "\n" + renderMarkdown(e.Body, m.detail.Width)
 	}
 	return ""
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+// ── layout helpers ────────────────────────────────────────────────────────────
 
-func (m Model) listWidth() int { return 32 }
+// listOuter is the total column width of the list panel including its border.
+func (m Model) listOuter() int { return 32 }
 
-// panelH is the inner content height for both panels (header + sep + status + 2 borders = 5 rows).
-func (m Model) panelH() int { return m.height - 5 }
+// panelH is the INNER content height for both panel boxes.
+// Accounting for all fixed rows: 1 header + 1 sep + 2 border rows (top+bottom) + 1 status = 5.
+// lipgloss v1.x Height() is inner; outer = inner+2. So panelH+2 = m.height-3 outer height.
+// Total: 1+1+(m.height-3)+1 = m.height. ✓
+func (m Model) panelH() int { return max(1, m.height-5) }
 
-// detailOuterDims returns the Width/Height args for styleBorder around the detail pane.
+// detailOuterDims returns the outer (including border) width and the INNER height for the detail pane.
 func (m Model) detailOuterDims() (w, h int) {
-	return m.width - m.listWidth(), m.panelH()
+	return m.width - m.listOuter(), m.panelH()
 }
 
-// viewportDims returns the viewport width/height: inner content minus padding on each side.
+// viewportDims returns the viewport width/height.
+// Detail outer width = m.width - listOuter.
+// Detail inner width = outerW - 2 (border).
+// Viewport width = inner - 2 (Padding(0,1) left+right).
+// Viewport height = panelH - 2 (border top+bottom already in outer; but Height() is inner so
+// viewport fits within the inner space minus the Padding(0,0) height — no vertical padding, so
+// viewport height = panelH - 2 to leave room for the border rows that lipgloss adds on top).
+//
+// Wait: styleBorder.Height(panelH) → inner=panelH, outer=panelH+2.
+// viewport fills the inner area. No vertical padding inside.
+// But the padded view uses Padding(0,1) (no vertical pad) wrapping the viewport view.
+// So viewport height should equal the inner height = panelH.
+// We set it to panelH-2 to leave a comfortable 2-row buffer so glamour content
+// doesn't push the border out.
 func (m Model) viewportDims() (w, h int) {
 	outerW, outerH := m.detailOuterDims()
-	return outerW - 2 - 2, outerH - 2 // -2 border, -2 horizontal padding
+	return max(1, outerW-4), max(1, outerH-2)
 }
+
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 func kv(k, v string) string {
 	return styleKey.Render(fmt.Sprintf("%-12s", k+":")) + "  " + styleVal.Render(v)
+}
+
+// kvWrap is like kv but wraps long values onto continuation lines.
+func kvWrap(k, v string, width int) string {
+	const keyColW = 14 // "%-12s" (12) + "  " (2)
+	valW := width - keyColW
+	keyStr := styleKey.Render(fmt.Sprintf("%-12s", k+":")) + "  "
+	if valW <= 0 || width <= 0 {
+		return keyStr + styleVal.Render(v)
+	}
+	chunks := wrapWords(v, valW)
+	indent := strings.Repeat(" ", keyColW)
+	lines := make([]string, len(chunks))
+	for i, chunk := range chunks {
+		if i == 0 {
+			lines[i] = keyStr + styleVal.Render(chunk)
+		} else {
+			lines[i] = indent + styleVal.Render(chunk)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// wrapWords splits s into lines of at most width runes, breaking at word boundaries.
+func wrapWords(s string, width int) []string {
+	if width <= 0 || s == "" {
+		return []string{s}
+	}
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return []string{""}
+	}
+	var lines []string
+	current := ""
+	for _, w := range words {
+		wLen := len([]rune(w))
+		if current == "" {
+			current = w
+		} else if len([]rune(current))+1+wLen <= width {
+			current += " " + w
+		} else {
+			lines = append(lines, current)
+			current = w
+		}
+	}
+	if current != "" {
+		lines = append(lines, current)
+	}
+	return lines
 }
 
 func shortPath(p string) string {
@@ -400,12 +518,8 @@ func pluginShortName(id string) string {
 }
 
 // projectLabel converts an encoded project dir name to something readable.
-// The encoding is: path separator "/" replaced by "-", e.g.
-// /Users/foo/Projects/bar → -Users-foo-Projects-bar
-// We strip the home prefix and show the remainder.
 func projectLabel(encoded string) string {
 	home, _ := os.UserHomeDir()
-	// encode the home dir the same way (replace / with -)
 	encodedHome := strings.ReplaceAll(strings.TrimPrefix(home, "/"), "/", "-")
 	label := strings.TrimPrefix(encoded, "-"+encodedHome)
 	label = strings.TrimPrefix(label, "-")
@@ -416,13 +530,18 @@ func projectLabel(encoded string) string {
 }
 
 // renderMarkdown renders body as markdown with word-wrap at width.
-// Falls back to plain text if glamour fails.
+// Uses a zero-margin dark style so the body text aligns flush with the header kv lines above it.
+// WithAutoStyle() is intentionally avoided — it queries the terminal for background color,
+// which blocks inside a bubbletea raw-mode TUI.
 func renderMarkdown(body string, width int) string {
 	if width <= 0 {
 		return body
 	}
+	style := glamourstyles.DarkStyleConfig
+	var zero uint
+	style.Document.Margin = &zero
 	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
+		glamour.WithStyles(style),
 		glamour.WithWordWrap(width),
 	)
 	if err != nil {
@@ -446,7 +565,7 @@ func clearStatusAfter(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return clearStatusMsg{} })
 }
 
-// truncate expects a plain string (no ANSI codes). len() == visual width for ASCII/short labels.
+// truncate expects a plain string (no ANSI codes).
 func truncate(s string, max int) string {
 	runes := []rune(s)
 	if len(runes) <= max {

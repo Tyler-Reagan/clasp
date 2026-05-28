@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -28,14 +29,25 @@ type Skill struct {
 
 type PluginInstall struct {
 	Scope       string `json:"scope"`
+	InstallPath string `json:"installPath"`
 	Version     string `json:"version"`
 	InstalledAt string `json:"installedAt"`
+	LastUpdated string `json:"lastUpdated"`
+}
+
+type MCPServer struct {
+	Name   string
+	Type   string
+	URL    string
+	Plugin string // plugin ID that provides this server, empty if standalone
 }
 
 type Plugin struct {
-	ID       string
-	Installs []PluginInstall
-	Enabled  bool
+	ID         string
+	Installs   []PluginInstall
+	Enabled    bool
+	MCPServers []MCPServer
+	SkillNames []string
 }
 
 func (p Plugin) Version() string {
@@ -69,10 +81,11 @@ type MemoryEntry struct {
 }
 
 type State struct {
-	Sessions []Session
-	Skills   []Skill
-	Plugins  []Plugin
-	Memory   []MemoryEntry
+	Sessions   []Session
+	Skills     []Skill
+	Plugins    []Plugin
+	MCPServers []MCPServer
+	Memory     []MemoryEntry
 }
 
 func ClaudeDir() string {
@@ -119,11 +132,14 @@ func loadSkills(dir string, s *State) error {
 		return err
 	}
 	for _, e := range entries {
-		if !e.IsDir() {
+		name := e.Name()
+		skillPath := filepath.Join(dir, "skills", name)
+		// Use os.Stat to follow symlinks — IsDir() on a DirEntry returns false for symlinked dirs.
+		fi, err := os.Stat(skillPath)
+		if err != nil || !fi.IsDir() {
 			continue
 		}
-		name := e.Name()
-		data, err := os.ReadFile(filepath.Join(dir, "skills", name, "meta.json"))
+		data, err := os.ReadFile(filepath.Join(skillPath, "meta.json"))
 		if err != nil {
 			s.Skills = append(s.Skills, Skill{SkillMeta{Name: name}})
 			continue
@@ -159,14 +175,78 @@ func loadPlugins(dir string, s *State) error {
 		}
 	}
 
-	for id, installs := range raw.Plugins {
-		s.Plugins = append(s.Plugins, Plugin{
+	// sort for stable ordering
+	ids := make([]string, 0, len(raw.Plugins))
+	for id := range raw.Plugins {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	for _, id := range ids {
+		installs := raw.Plugins[id]
+		p := Plugin{
 			ID:       id,
 			Installs: installs,
 			Enabled:  enabled[id],
-		})
+		}
+		if len(installs) > 0 && installs[0].InstallPath != "" {
+			p.MCPServers = readPluginMCPServers(installs[0].InstallPath, id)
+			p.SkillNames = readPluginSkillNames(installs[0].InstallPath)
+			s.MCPServers = append(s.MCPServers, p.MCPServers...)
+		}
+		s.Plugins = append(s.Plugins, p)
 	}
 	return nil
+}
+
+func readPluginMCPServers(installPath, pluginID string) []MCPServer {
+	data, err := os.ReadFile(filepath.Join(installPath, ".mcp.json"))
+	if err != nil {
+		return nil
+	}
+	var raw struct {
+		MCPServers map[string]struct {
+			Type string `json:"type"`
+			URL  string `json:"url"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(raw.MCPServers))
+	for name := range raw.MCPServers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	servers := make([]MCPServer, 0, len(names))
+	for _, name := range names {
+		cfg := raw.MCPServers[name]
+		servers = append(servers, MCPServer{
+			Name:   name,
+			Type:   cfg.Type,
+			URL:    cfg.URL,
+			Plugin: pluginID,
+		})
+	}
+	return servers
+}
+
+func readPluginSkillNames(installPath string) []string {
+	entries, err := os.ReadDir(filepath.Join(installPath, "skills"))
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, e := range entries {
+		skillPath := filepath.Join(installPath, "skills", e.Name())
+		fi, err := os.Stat(skillPath)
+		if err != nil || !fi.IsDir() {
+			continue
+		}
+		names = append(names, e.Name())
+	}
+	sort.Strings(names)
+	return names
 }
 
 func loadMemory(dir string, s *State) error {
@@ -215,7 +295,10 @@ func parseMemoryFile(project, filename, content string) MemoryEntry {
 		case "description":
 			entry.Desc = v
 		case "type":
-			entry.Type = strings.Fields(v)[0]
+			fields := strings.Fields(v)
+			if len(fields) > 0 {
+				entry.Type = fields[0]
+			}
 		}
 	}
 	return entry
