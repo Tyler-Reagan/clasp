@@ -632,11 +632,14 @@ func (m Model) detailContent() string {
 			kv("Installed", p.InstalledAt()),
 		)
 		lines = append(lines, "", styleMuted.Render(strings.Repeat("─", m.detail.Width)))
-		lines = append(lines, pluginSection("Skills", p.SkillNames))
-		lines = append(lines, pluginSection("MCP Servers", mcpNames(p.MCPServers)))
-		lines = append(lines, pluginSection("Commands", p.Commands))
-		lines = append(lines, pluginSection("Agents", p.Agents))
-		lines = append(lines, pluginSection("Hooks", p.HookEvents))
+		sections := []sectionBlock{
+			{"Skills", p.SkillNames},
+			{"MCP Servers", mcpNames(p.MCPServers)},
+			{"Commands", p.Commands},
+			{"Agents", p.Agents},
+			{"Hooks", p.HookEvents},
+		}
+		lines = append(lines, renderPluginSections(sections, m.detail.Width))
 		claudeMD := "(none)"
 		if p.HasClaudeMD {
 			claudeMD = styleGreen.Render("yes")
@@ -840,6 +843,46 @@ func renderMarkdown(body string, width int) string {
 		return body
 	}
 	return strings.TrimSpace(out)
+}
+
+// sectionBlock is one labelled content group inside the plugin detail
+// (Skills, MCP Servers, Commands, etc.). renderPluginSections distributes
+// these across columns based on available width.
+type sectionBlock struct {
+	label string
+	items []string
+}
+
+// renderPluginSections lays out the plugin-detail sections in 1, 2, or 3
+// columns depending on innerW (see columnsForWidth). Multi-column layouts
+// pad each column to a uniform width with two-space inter-column gutters
+// so lipgloss.JoinHorizontal aligns the section labels across rows.
+func renderPluginSections(sections []sectionBlock, innerW int) string {
+	cols := columnsForWidth(innerW)
+	if len(cols) == 1 {
+		parts := make([]string, len(sections))
+		for i, s := range sections {
+			parts[i] = pluginSection(s.label, s.items)
+		}
+		return strings.Join(parts, "\n")
+	}
+
+	const gutter = 2
+	colWidth := (innerW - (len(cols)-1)*gutter) / len(cols)
+	if colWidth < 1 {
+		colWidth = 1
+	}
+	colStyle := lipgloss.NewStyle().Width(colWidth)
+
+	rendered := make([]string, len(cols))
+	for ci, indices := range cols {
+		parts := make([]string, 0, len(indices))
+		for _, si := range indices {
+			parts = append(parts, pluginSection(sections[si].label, sections[si].items))
+		}
+		rendered[ci] = colStyle.Render(strings.Join(parts, "\n"))
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, rendered...)
 }
 
 // pluginSection renders a labelled content group with a (none) fallback.
