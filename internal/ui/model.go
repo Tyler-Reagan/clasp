@@ -363,27 +363,35 @@ func (m Model) detailContent() string {
 		if p.Enabled {
 			statusStr = styleGreen.Render("enabled")
 		}
-		lines := []string{
-			styleDetailTitle.Render(pluginShortName(p.ID)),
-			"",
+		title := pluginShortName(p.ID)
+		if p.DisplayName != "" && p.DisplayName != title {
+			title = p.DisplayName
+		}
+		lines := []string{styleDetailTitle.Render(title), ""}
+		if p.Description != "" {
+			lines = append(lines, kvWrap("Description", p.Description, m.detail.Width))
+		}
+		if p.Author != "" {
+			lines = append(lines, kv("Author", p.Author))
+		}
+		lines = append(lines,
 			kv("ID", p.ID),
 			kv("Version", p.Version()),
-			fmt.Sprintf("%-12s", "Status:") + "  " + statusStr,
+			fmt.Sprintf("%-12s", "Status:")+"  "+statusStr,
 			kv("Scope", p.Scope()),
 			kv("Installed", p.InstalledAt()),
+		)
+		lines = append(lines, "", styleMuted.Render(strings.Repeat("─", m.detail.Width)))
+		lines = append(lines, pluginSection("Skills", p.SkillNames))
+		lines = append(lines, pluginSection("MCP Servers", mcpNames(p.MCPServers)))
+		lines = append(lines, pluginSection("Commands", p.Commands))
+		lines = append(lines, pluginSection("Agents", p.Agents))
+		lines = append(lines, pluginSection("Hooks", p.HookEvents))
+		claudeMD := "(none)"
+		if p.HasClaudeMD {
+			claudeMD = styleGreen.Render("yes")
 		}
-		if len(p.MCPServers) > 0 {
-			lines = append(lines, "", styleMuted.Render("MCP Servers"))
-			for _, srv := range p.MCPServers {
-				lines = append(lines, "  "+styleMuted.Render("·")+" "+srv.Name)
-			}
-		}
-		if len(p.SkillNames) > 0 {
-			lines = append(lines, "", styleMuted.Render("Skills"))
-			for _, sk := range p.SkillNames {
-				lines = append(lines, "  "+styleMuted.Render("·")+" "+sk)
-			}
-		}
+		lines = append(lines, kv("CLAUDE.md", claudeMD))
 		return strings.Join(lines, "\n")
 
 	case tabMCP:
@@ -563,6 +571,33 @@ func renderMarkdown(body string, width int) string {
 		return body
 	}
 	return strings.TrimSpace(out)
+}
+
+// pluginSection renders a labelled content group with a (none) fallback.
+func pluginSection(label string, items []string) string {
+	key := styleKey.Render(fmt.Sprintf("%-12s", label+":")) + "  "
+	if len(items) == 0 {
+		return key + styleMuted.Render("(none)")
+	}
+	lines := make([]string, len(items))
+	indent := strings.Repeat(" ", 14)
+	for i, item := range items {
+		if i == 0 {
+			lines[i] = key + styleVal.Render(item)
+		} else {
+			lines[i] = indent + styleVal.Render(item)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// mcpNames extracts just the server names from a []MCPServer slice.
+func mcpNames(servers []state.MCPServer) []string {
+	names := make([]string, len(servers))
+	for i, s := range servers {
+		names[i] = s.Name
+	}
+	return names
 }
 
 func pluginToggleCmd(id string) tea.Cmd {

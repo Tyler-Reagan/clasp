@@ -43,18 +43,27 @@ type MCPServer struct {
 }
 
 type Plugin struct {
-	ID         string
-	Installs   []PluginInstall
-	Enabled    bool
-	MCPServers []MCPServer
-	SkillNames []string
+	ID          string
+	Installs    []PluginInstall
+	Enabled     bool
+	// from .claude-plugin/plugin.json
+	DisplayName string
+	Description string
+	Author      string
+	// contents — all sourced from the install path
+	MCPServers  []MCPServer
+	SkillNames  []string
+	HookEvents  []string // e.g. ["SessionStart", "Stop"]
+	Commands    []string // names from commands/*.md
+	Agents      []string // names from agents/*.md
+	HasClaudeMD bool
 }
 
 func (p Plugin) Version() string {
 	if len(p.Installs) > 0 {
 		return p.Installs[0].Version
 	}
-	return "unknown"
+	return ""
 }
 
 func (p Plugin) InstalledAt() string {
@@ -300,13 +309,38 @@ func loadPlugins(dir string, s *State) error {
 			Enabled:  enabled[id],
 		}
 		if len(installs) > 0 && installs[0].InstallPath != "" {
-			p.MCPServers = readPluginMCPServers(installs[0].InstallPath, id)
-			p.SkillNames = readPluginSkillNames(installs[0].InstallPath)
+			ip := installs[0].InstallPath
+			readPluginMeta(ip, &p)
+			p.MCPServers = readPluginMCPServers(ip, id)
+			p.SkillNames = readPluginSkillNames(ip)
+			p.HookEvents = readPluginHookEvents(ip)
+			p.Commands = readPluginMDNames(ip, "commands")
+			p.Agents = readPluginMDNames(ip, "agents")
+			p.HasClaudeMD = fileExists(filepath.Join(ip, "CLAUDE.md"))
 			s.MCPServers = append(s.MCPServers, p.MCPServers...)
 		}
 		s.Plugins = append(s.Plugins, p)
 	}
 	return nil
+}
+
+func readPluginMeta(installPath string, p *Plugin) {
+	data, err := os.ReadFile(filepath.Join(installPath, ".claude-plugin", "plugin.json"))
+	if err != nil {
+		return
+	}
+	var raw struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Author      struct {
+			Name string `json:"name"`
+		} `json:"author"`
+	}
+	if json.Unmarshal(data, &raw) == nil {
+		p.DisplayName = raw.Name
+		p.Description = raw.Description
+		p.Author = raw.Author.Name
+	}
 }
 
 func readPluginMCPServers(installPath, pluginID string) []MCPServer {
@@ -357,6 +391,57 @@ func readPluginSkillNames(installPath string) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func readPluginHookEvents(installPath string) []string {
+	data, err := os.ReadFile(filepath.Join(installPath, "hooks", "hooks.json"))
+	if err != nil {
+		return nil
+	}
+	var raw struct {
+		Hooks map[string]json.RawMessage `json:"hooks"`
+	}
+	// hooks.json may use the hooks key or be a flat object
+	if err := json.Unmarshal(data, &raw); err != nil || raw.Hooks == nil {
+		var flat map[string]json.RawMessage
+		if json.Unmarshal(data, &flat) != nil {
+			return nil
+		}
+		raw.Hooks = flat
+	}
+	events := make([]string, 0, len(raw.Hooks))
+	for event := range raw.Hooks {
+		events = append(events, event)
+	}
+	sort.Strings(events)
+	return events
+}
+
+// readPluginMDNames lists non-template .md files in a plugin subdirectory,
+// returning their base names without extension. Files prefixed with _ are skipped
+// (convention: _conventions.md and similar are internal, not user-facing).
+func readPluginMDNames(installPath, subdir string) []string {
+	entries, err := os.ReadDir(filepath.Join(installPath, subdir))
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, e := range entries {
+		n := e.Name()
+		if strings.HasPrefix(n, "_") || strings.HasSuffix(n, ".tmpl") || e.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(n, ".md") {
+			names = append(names, strings.TrimSuffix(n, ".md"))
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func loadMemory(dir string, s *State) error {
