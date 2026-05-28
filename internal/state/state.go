@@ -109,7 +109,7 @@ func Load() (*State, error) {
 	var firstErr error
 
 	for _, fn := range []func(string, *State) error{
-		loadSessions, loadSkills, loadPlugins, loadMemory,
+		loadSessions, loadSkills, loadPlugins, loadStandaloneMCPServers, loadMemory,
 	} {
 		if err := fn(dir, s); err != nil && firstErr == nil {
 			firstErr = err
@@ -446,6 +446,67 @@ func readPluginMDNames(installPath, subdir string) []string {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// loadStandaloneMCPServers appends MCP servers declared outside of any plugin —
+// the top-level mcpServers object in ~/.claude/settings.json and ~/.claude.json.
+// Plugin-provided names take precedence: a standalone entry with the same name is skipped.
+// Must run after loadPlugins so pluginProvided is populated.
+func loadStandaloneMCPServers(dir string, s *State) error {
+	pluginProvided := make(map[string]bool, len(s.MCPServers))
+	for _, srv := range s.MCPServers {
+		pluginProvided[srv.Name] = true
+	}
+
+	home, _ := os.UserHomeDir()
+	paths := []string{
+		filepath.Join(dir, "settings.json"),
+		filepath.Join(home, ".claude.json"),
+	}
+
+	seen := make(map[string]bool)
+	var standalone []MCPServer
+	for _, path := range paths {
+		servers, err := readStandaloneMCPFile(path)
+		if err != nil {
+			return err
+		}
+		for _, srv := range servers {
+			if seen[srv.Name] || pluginProvided[srv.Name] {
+				continue
+			}
+			seen[srv.Name] = true
+			standalone = append(standalone, srv)
+		}
+	}
+
+	sort.Slice(standalone, func(i, j int) bool { return standalone[i].Name < standalone[j].Name })
+	s.MCPServers = append(s.MCPServers, standalone...)
+	return nil
+}
+
+func readStandaloneMCPFile(path string) ([]MCPServer, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	var raw struct {
+		MCPServers map[string]struct {
+			Type string `json:"type"`
+			URL  string `json:"url"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	servers := make([]MCPServer, 0, len(raw.MCPServers))
+	for name, cfg := range raw.MCPServers {
+		servers = append(servers, MCPServer{Name: name, Type: cfg.Type, URL: cfg.URL})
+	}
+	return servers, nil
 }
 
 func loadMemory(dir string, s *State) error {
