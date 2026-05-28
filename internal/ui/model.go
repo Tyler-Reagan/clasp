@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -25,6 +26,13 @@ var tabNames = [tabCount]string{"Sessions", "Skills", "Plugins", "Memory"}
 
 type RefreshMsg struct{}
 
+type toggleResultMsg struct {
+	id  string
+	err error
+}
+
+type clearStatusMsg struct{}
+
 // rowItem separates the styled indicator from the plain label so truncation
 // operates only on plain bytes (no ANSI escape codes).
 type rowItem struct {
@@ -34,14 +42,15 @@ type rowItem struct {
 }
 
 type Model struct {
-	st      *state.State
-	loadErr error
-	tab     tab
-	cursors [tabCount]int
-	width   int
-	height  int
-	detail  viewport.Model
-	ready   bool
+	st        *state.State
+	loadErr   error
+	tab       tab
+	cursors   [tabCount]int
+	width     int
+	height    int
+	detail    viewport.Model
+	ready     bool
+	statusMsg string // transient feedback shown in the status bar
 }
 
 func New() (*Model, error) {
@@ -69,6 +78,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		st, err := state.Load()
 		m.st, m.loadErr = st, err
 		m.detail.SetContent(m.detailContent())
+		return m, nil
+
+	case toggleResultMsg:
+		if msg.err != nil {
+			m.statusMsg = styleRed.Render("✗ " + msg.err.Error())
+		} else {
+			m.statusMsg = styleGreen.Render("✓ toggled " + pluginShortName(msg.id))
+		}
+		return m, clearStatusAfter(3 * time.Second)
+
+	case clearStatusMsg:
+		m.statusMsg = ""
 		return m, nil
 
 	case tea.KeyMsg:
@@ -103,6 +124,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "r":
 			return m, func() tea.Msg { return RefreshMsg{} }
+		case " ":
+			if m.tab == tabPlugins && m.st != nil {
+				c := m.cursors[m.tab]
+				if c < len(m.st.Plugins) {
+					id := m.st.Plugins[c].ID
+					return m, pluginToggleCmd(id)
+				}
+			}
 		}
 		// pass remaining keys (PgUp/PgDn/etc.) to detail viewport
 		var cmd tea.Cmd
@@ -183,19 +212,30 @@ func (m Model) renderDetail() string {
 }
 
 func (m Model) renderStatus() string {
-	hint := styleKey.Render("↑↓/jk") + styleMuted.Render(" navigate  ") +
+	var right string
+	if m.statusMsg != "" {
+		right = m.statusMsg
+	} else if m.loadErr != nil {
+		right = styleYellow.Render("⚠ " + m.loadErr.Error())
+	}
+
+	hint := styleKey.Render("↑↓/jk") + styleMuted.Render(" nav  ") +
 		styleKey.Render("tab/hl") + styleMuted.Render(" switch  ") +
-		styleKey.Render("PgUp/PgDn") + styleMuted.Render(" scroll detail  ") +
+		styleKey.Render("PgUp/Dn") + styleMuted.Render(" scroll  ") +
 		styleKey.Render("r") + styleMuted.Render(" refresh  ") +
 		styleKey.Render("q") + styleMuted.Render(" quit")
-	if m.loadErr != nil {
-		hint += "  " + styleYellow.Render("⚠ "+m.loadErr.Error())
+	if m.tab == tabPlugins {
+		hint += "  " + styleKey.Render("space") + styleMuted.Render(" toggle")
 	}
+
+	pad := max(0, m.width-2-lipgloss.Width(hint)-lipgloss.Width(right))
+	bar := hint + strings.Repeat(" ", pad) + right
+
 	return lipgloss.NewStyle().
 		Background(colorBorder).
 		Width(m.width).
 		Padding(0, 1).
-		Render(hint)
+		Render(bar)
 }
 
 // ── list rows ─────────────────────────────────────────────────────────────────
@@ -372,6 +412,17 @@ func projectLabel(encoded string) string {
 		return encoded
 	}
 	return strings.ReplaceAll(label, "-", "/")
+}
+
+func pluginToggleCmd(id string) tea.Cmd {
+	return func() tea.Msg {
+		err := state.TogglePlugin(id)
+		return toggleResultMsg{id: id, err: err}
+	}
+}
+
+func clearStatusAfter(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(time.Time) tea.Msg { return clearStatusMsg{} })
 }
 
 // truncate expects a plain string (no ANSI codes). len() == visual width for ASCII/short labels.
