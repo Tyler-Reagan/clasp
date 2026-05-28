@@ -3,19 +3,19 @@
 A read-only terminal UI companion for [Claude Code](https://claude.ai/code) — think k9s, but for your AI coding session. Runs as a separate process (tmux pane, split terminal, etc.) and watches `~/.claude` state files in real time.
 
 ```
-████ █    ████ ████ ████        Sessions  Skills  Plugins  MCP  Memory
+████ █    ████ ████ ████
 █    █    █  █ █    █  █
 █    █    ████  ███ ████
-████ ████ █  █ ████ █
+████ ████ █  █ ████ █                         Sessions  Skills  Plugins  MCP  Memory
 ────────────────────────────────────────────────────────────────────────────────────
 ╭──────────────────────────────╮╭──────────────────────────────────────────────────╮
-│ ▌● 41667  ~/Projects         ││ Session                                           │
-│  ● 69607  ~/Projects/clasp   ││                                                   │
-│                              ││ PID:           41667                              │
+│ ▌● 41667  ~/Projects         ││ Session                                          │
+│  ● 69607  ~/Projects/clasp   ││                                                  │
+│                              ││ PID:           41667                             │
 │                              ││ Session ID:    4bdf515e-70e7-4149-a535-abb788…   │
-│                              ││ CWD:           ~/Projects                         │
-│                              ││ Status:        idle                               │
-│                              ││ Version:       2.1.152                            │
+│                              ││ CWD:           ~/Projects                        │
+│                              ││ Status:        idle                              │
+│                              ││ Version:       2.1.152                           │
 ╰──────────────────────────────╯╰──────────────────────────────────────────────────╯
  ↑↓/jk list · gg/G top/end · hl/tab switch · ^d/^u scroll · enter zoom · ? help · q quit
 ```
@@ -148,10 +148,21 @@ clasp/
 **Milestone 2 — first write action** ✓
 - [x] Toggle a plugin on/off with `space` in the Plugins tab (modifies `~/.claude/settings.json`)
 
-**Later**
-- [ ] Session history / command log viewer
-- [ ] Token and cost metrics from session JSONL
-- [ ] Dismissable error popup (k9s-style) for surfacing aggregated loader errors
+**Milestone 3 — vim-style navigation and zoom** ✓
+- [x] Vim-style `gg`/`G`, `Ctrl+D`/`Ctrl+U`/`Ctrl+F`/`Ctrl+B` scroll
+- [x] Zoom mode (`Enter`) for full-width detail reading
+- [x] Context-sensitive `?` help overlay
+- [x] Adaptive multi-column plugin detail at wide terminals
+
+**Milestone 4 — visual identity** ✓
+- [x] Custom warm palette (copper accent, parchment text, steel chrome)
+- [x] Pixel-art "clasp" wordmark inspired by the Claude Code brand
+- [x] Branded loading / empty / error states
+
+**Later** — polish opportunities tracked in [open issues](https://github.com/Tyler-Reagan/clasp/issues):
+- Wordmark offset-shadow effect, scroll-percentage indicator, clipboard yank, small-terminal degradation, parse-warning surfacing, `CLAUDE.md` for the repo, terminal screenshot, glamour render caching
+- Session history / command log viewer
+- Token and cost metrics from session JSONL
 
 ## Built with
 
