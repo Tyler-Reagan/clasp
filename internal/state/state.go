@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -118,9 +119,10 @@ func Load() (*State, error) {
 }
 
 func loadSessions(dir string, s *State) error {
-	files, err := filepath.Glob(filepath.Join(dir, "sessions", "*.json"))
+	pattern := filepath.Join(dir, "sessions", "*.json")
+	files, err := filepath.Glob(pattern)
 	if err != nil {
-		return err
+		return fmt.Errorf("glob %s: %w", pattern, err)
 	}
 	for _, f := range files {
 		data, err := os.ReadFile(f)
@@ -136,9 +138,10 @@ func loadSessions(dir string, s *State) error {
 }
 
 func loadSkills(dir string, s *State) error {
-	entries, err := os.ReadDir(filepath.Join(dir, "skills"))
+	skillsDir := filepath.Join(dir, "skills")
+	entries, err := os.ReadDir(skillsDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("read %s: %w", skillsDir, err)
 	}
 	for _, e := range entries {
 		name := e.Name()
@@ -273,15 +276,16 @@ func firstParagraph(body string) string {
 }
 
 func loadPlugins(dir string, s *State) error {
-	data, err := os.ReadFile(filepath.Join(dir, "plugins", "installed_plugins.json"))
+	manifestPath := filepath.Join(dir, "plugins", "installed_plugins.json")
+	data, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("read %s: %w", manifestPath, err)
 	}
 	var raw struct {
 		Plugins map[string][]PluginInstall `json:"plugins"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
+		return fmt.Errorf("parse %s: %w", manifestPath, err)
 	}
 
 	enabled := map[string]bool{}
@@ -445,9 +449,10 @@ func fileExists(path string) bool {
 }
 
 func loadMemory(dir string, s *State) error {
-	entries, err := os.ReadDir(filepath.Join(dir, "projects"))
+	projectsDir := filepath.Join(dir, "projects")
+	entries, err := os.ReadDir(projectsDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("read %s: %w", projectsDir, err)
 	}
 	for _, proj := range entries {
 		if !proj.IsDir() {
