@@ -374,6 +374,26 @@ func (m Model) helpContextLabel() string {
 
 // ── rendering ────────────────────────────────────────────────────────────────
 
+// wordmarkLines is the static 4-row pixel-art "clasp" wordmark. The styling
+// is loosely modeled on the Claude Code brand wordmark — chunky block letters
+// in the warm-spectrum copper accent. Each letter is 4 cells wide; the whole
+// wordmark is 24 cells wide.
+var wordmarkLines = []string{
+	"████ █    ████ ████ ████",
+	"█    █    █  █ █    █  █",
+	"█    █    ████  ███ ████",
+	"████ ████ █  █ ████ █   ",
+}
+
+func renderWordmark() string {
+	style := stylePrimary.Bold(true)
+	out := make([]string, len(wordmarkLines))
+	for i, l := range wordmarkLines {
+		out[i] = style.Render(l)
+	}
+	return strings.Join(out, "\n")
+}
+
 func (m Model) renderHeader() string {
 	var tabs []string
 	for i, name := range tabNames {
@@ -390,10 +410,23 @@ func (m Model) renderHeader() string {
 			tabs = append(tabs, styleTabInactive.Render(name))
 		}
 	}
-	title := styleTitle.Render("clasp")
+
+	wordmark := renderWordmark()
 	tabRow := strings.Join(tabs, "")
-	pad := max(0, m.width-lipgloss.Width(title)-lipgloss.Width(tabRow))
-	return title + strings.Repeat(" ", pad) + tabRow
+
+	wordmarkW := lipgloss.Width(wordmark)
+	wordmarkH := lipgloss.Height(wordmark)
+	padW := max(0, m.width-wordmarkW-lipgloss.Width(tabRow))
+
+	// Right column: pad the tab row to the right edge and bottom-align it
+	// against the wordmark so tabs sit on the baseline of the letterforms.
+	rightCol := lipgloss.PlaceVertical(
+		wordmarkH,
+		lipgloss.Bottom,
+		strings.Repeat(" ", padW)+tabRow,
+	)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, wordmark, rightCol)
 }
 
 func (m Model) renderList() string {
@@ -709,12 +742,13 @@ func (m Model) listOuter() int { return 32 }
 
 // panelH is the inner content height (excluding border) for both panel boxes.
 //
-// Vertical stack: header(1) + separator(1) + panel outer(panelH+2) + status(1) = m.height
-//   → panel outer = m.height - 3
-//   → panel inner = panel outer - 2 = m.height - 5
+// Vertical stack: header(4) + separator(1) + panel outer(panelH+2) + status(1) = m.height
+//   → panel outer = m.height - 6
+//   → panel inner = panel outer - 2 = m.height - 8
 //
-// lipgloss v1 convention: styleBorder.Height(n) sets inner height to n; outer = n+2.
-func (m Model) panelH() int { return max(1, m.height-5) }
+// The header is 4 rows because it carries the pixel-art wordmark. lipgloss v1
+// convention: styleBorder.Height(n) sets inner height to n; outer = n+2.
+func (m Model) panelH() int { return max(1, m.height-8) }
 
 // detailOuterDims returns the OUTER width and the INNER height of the detail pane.
 // (Asymmetric because the width minus listOuter is what's available; the height comes
