@@ -108,13 +108,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
 			m.detail.GotoTop()
 			m.detail.SetContent(m.detailContent())
-			return m, nil
+			return m, func() tea.Msg { return RefreshMsg{} }
 		case "shift+tab", "h":
 			m.tab = (m.tab - 1 + tabCount) % tabCount
 			m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
 			m.detail.GotoTop()
 			m.detail.SetContent(m.detailContent())
-			return m, nil
+			return m, func() tea.Msg { return RefreshMsg{} }
 		case "up", "k":
 			if m.cursors[m.tab] > 0 {
 				m.cursors[m.tab]--
