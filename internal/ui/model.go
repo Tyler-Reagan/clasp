@@ -129,6 +129,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.detail.SetContent(m.detailContent())
 			}
 			return m, nil
+		case "g":
+			m.cursors[m.tab] = 0
+			m.detail.GotoTop()
+			m.detail.SetContent(m.detailContent())
+			return m, nil
+		case "G":
+			m.cursors[m.tab] = max(0, m.listLen()-1)
+			m.detail.GotoTop()
+			m.detail.SetContent(m.detailContent())
+			return m, nil
 		case "r":
 			return m, func() tea.Msg { return RefreshMsg{} }
 		case " ":
@@ -249,15 +259,19 @@ func (m Model) renderStatus() string {
 		right = styleYellow.Render("warn: " + m.loadErr.Error())
 	}
 
-	hint := styleKey.Render("jk") + styleMuted.Render(" nav  ") +
-		styleKey.Render("hl/tab") + styleMuted.Render(" switch  ") +
-		styleKey.Render("PgUp/Dn") + styleMuted.Render(" scroll  ") +
-		styleKey.Render("r") + styleMuted.Render(" refresh  ") +
-		styleKey.Render("q") + styleMuted.Render(" quit")
-	if m.tab == tabPlugins {
-		hint += "  " + styleKey.Render("space") + styleMuted.Render(" toggle")
+	hints := []hintPair{
+		{"↑↓/jk", "list"},
+		{"g/G", "top/end"},
+		{"hl/tab", "switch"},
+		{"PgUp/Dn", "scroll"},
+		{"r", "refresh"},
 	}
+	if m.tab == tabPlugins {
+		hints = append(hints, hintPair{"space", "toggle"})
+	}
+	hints = append(hints, hintPair{"q", "quit"})
 
+	hint := renderHints(hints)
 	pad := max(0, m.width-2-lipgloss.Width(hint)-lipgloss.Width(right))
 	bar := hint + strings.Repeat(" ", pad) + right
 
@@ -266,6 +280,17 @@ func (m Model) renderStatus() string {
 		Width(m.width).
 		Padding(0, 1).
 		Render(bar)
+}
+
+type hintPair struct{ key, desc string }
+
+func renderHints(pairs []hintPair) string {
+	sep := styleMuted.Render("  ·  ")
+	parts := make([]string, len(pairs))
+	for i, p := range pairs {
+		parts[i] = styleKey.Render(p.key) + styleMuted.Render(" "+p.desc)
+	}
+	return strings.Join(parts, sep)
 }
 
 // ── list rows ─────────────────────────────────────────────────────────────────
