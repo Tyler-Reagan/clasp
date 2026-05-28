@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
@@ -26,6 +28,16 @@ const (
 )
 
 var tabNames = [tabCount]string{"Sessions", "Skills", "Plugins", "MCP", "Memory"}
+
+// focus is the active interaction surface. The Update dispatcher routes keys
+// based on focus after handling any modal overlays (e.g. ? help — wired in
+// task #14) and globally-available keys.
+type focus int
+
+const (
+	focusList         focus = iota // List + detail side-by-side (browse mode).
+	focusZoomedDetail              // Detail full-screen (wired in task #13).
+)
 
 type RefreshMsg struct{}
 
@@ -52,17 +64,31 @@ type Model struct {
 	st        *state.State
 	loadErr   error
 	tab       tab
+	focus     focus
 	cursors   [tabCount]int
 	width     int
 	height    int
 	detail    viewport.Model
+	help      help.Model
+	keys      keyMap
+	vimG      vimG // tracks the gg two-press chord
+	showHelp  bool // ? overlay active; takes modal priority over focus dispatch
 	ready     bool
 	statusMsg string // transient feedback shown in the status bar
 }
 
 func New() (*Model, error) {
 	st, err := state.Load()
-	return &Model{st: st, loadErr: err}, nil
+	m := &Model{
+		st:      st,
+		loadErr: err,
+		focus:   focusList,
+		help:    help.New(),
+		keys:    defaultKeys(),
+	}
+	// Zoom/UnZoom/Toggle enabled state depends on current focus and tab.
+	m.refreshBindings()
+	return m, nil
 }
 
 func (m Model) Init() tea.Cmd { return nil }
@@ -78,6 +104,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.detail.Width, m.detail.Height = vw, vh
 		}
+		m.help.Width = m.width
 		m.detail.SetContent(m.detailContent())
 		return m, nil
 
@@ -100,78 +127,249 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
-			return m, tea.Quit
-		case "tab", "l":
-			m.tab = (m.tab + 1) % tabCount
-			m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
-			m.detail.GotoTop()
-			m.detail.SetContent(m.detailContent())
-			return m, func() tea.Msg { return RefreshMsg{} }
-		case "shift+tab", "h":
-			m.tab = (m.tab - 1 + tabCount) % tabCount
-			m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
-			m.detail.GotoTop()
-			m.detail.SetContent(m.detailContent())
-			return m, func() tea.Msg { return RefreshMsg{} }
-		case "up", "k":
-			if m.cursors[m.tab] > 0 {
-				m.cursors[m.tab]--
-				m.detail.GotoTop()
-				m.detail.SetContent(m.detailContent())
-			}
-			return m, nil
-		case "down", "j":
-			if m.cursors[m.tab] < m.listLen()-1 {
-				m.cursors[m.tab]++
-				m.detail.GotoTop()
-				m.detail.SetContent(m.detailContent())
-			}
-			return m, nil
-		case "g":
-			m.cursors[m.tab] = 0
-			m.detail.GotoTop()
-			m.detail.SetContent(m.detailContent())
-			return m, nil
-		case "G":
-			m.cursors[m.tab] = max(0, m.listLen()-1)
-			m.detail.GotoTop()
-			m.detail.SetContent(m.detailContent())
-			return m, nil
-		case "r":
-			return m, func() tea.Msg { return RefreshMsg{} }
-		case " ":
-			if m.tab == tabPlugins && m.st != nil {
-				c := m.cursors[m.tab]
-				if c < len(m.st.Plugins) {
-					id := m.st.Plugins[c].ID
-					return m, pluginToggleCmd(id)
-				}
-			}
+		// Modal priority: the ? overlay swallows keys before focus dispatch.
+		// ctrl+c still quits (universal kill); esc/?/q dismiss the overlay.
+		if m.showHelp {
+			return m.updateHelp(msg)
 		}
-		// pass remaining keys (PgUp/PgDn/etc.) to detail viewport
-		var cmd tea.Cmd
-		m.detail, cmd = m.detail.Update(msg)
-		return m, cmd
+
+		// Global keys: handled regardless of focus.
+		switch {
+		case key.Matches(msg, m.keys.Quit):
+			return m, tea.Quit
+		case key.Matches(msg, m.keys.Refresh):
+			return m, func() tea.Msg { return RefreshMsg{} }
+		case key.Matches(msg, m.keys.Help):
+			m.showHelp = true
+			return m, nil
+		}
+
+		// Focus-specific dispatch.
+		switch m.focus {
+		case focusList:
+			return m.updateList(msg)
+		case focusZoomedDetail:
+			return m.updateZoom(msg)
+		}
 	}
 	return m, nil
+}
+
+// updateHelp handles keys while the ? overlay is shown. Modal: the overlay
+// fully captures input until dismissed. ctrl+c stays as an unconditional quit.
+func (m Model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "esc", "?", "q":
+		m.showHelp = false
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// gg chord runs ahead of the main dispatch so single-g doesn't fire
+	// "go to top" on its own. Any non-g key cancels the chord (gContinue)
+	// and falls through to the regular handler.
+	switch m.vimG.step(msg.String()) {
+	case gWait:
+		return m, nil
+	case gTop:
+		m.cursors[m.tab] = 0
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, nil
+	}
+
+	switch {
+	case key.Matches(msg, m.keys.NextTab):
+		m.tab = (m.tab + 1) % tabCount
+		m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
+		m.refreshBindings()
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, func() tea.Msg { return RefreshMsg{} }
+	case key.Matches(msg, m.keys.PrevTab):
+		m.tab = (m.tab - 1 + tabCount) % tabCount
+		m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
+		m.refreshBindings()
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, func() tea.Msg { return RefreshMsg{} }
+	case key.Matches(msg, m.keys.Up):
+		if m.cursors[m.tab] > 0 {
+			m.cursors[m.tab]--
+			m.detail.GotoTop()
+			m.detail.SetContent(m.detailContent())
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Down):
+		if m.cursors[m.tab] < m.listLen()-1 {
+			m.cursors[m.tab]++
+			m.detail.GotoTop()
+			m.detail.SetContent(m.detailContent())
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.End):
+		m.cursors[m.tab] = max(0, m.listLen()-1)
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, nil
+	case key.Matches(msg, m.keys.Toggle):
+		if m.tab == tabPlugins && m.st != nil {
+			c := m.cursors[m.tab]
+			if c < len(m.st.Plugins) {
+				return m, pluginToggleCmd(m.st.Plugins[c].ID)
+			}
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollDown):
+		m.detail.HalfPageDown()
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollUp):
+		m.detail.HalfPageUp()
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollPageDown):
+		m.detail.PageDown()
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollPageUp):
+		m.detail.PageUp()
+		return m, nil
+	case key.Matches(msg, m.keys.Zoom):
+		m.focus = focusZoomedDetail
+		m.refreshBindings()
+		m.resizeDetail()
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m Model) updateZoom(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// gg chord (top-of-detail in zoom mode).
+	switch m.vimG.step(msg.String()) {
+	case gWait:
+		return m, nil
+	case gTop:
+		m.detail.GotoTop()
+		return m, nil
+	}
+
+	switch {
+	case key.Matches(msg, m.keys.UnZoom):
+		m.focus = focusList
+		m.refreshBindings()
+		m.resizeDetail()
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, nil
+	case key.Matches(msg, m.keys.NextTab), key.Matches(msg, m.keys.PrevTab):
+		// Forgiving Tab: exit zoom AND switch tab, landing in browse on the new tab.
+		m.focus = focusList
+		if key.Matches(msg, m.keys.NextTab) {
+			m.tab = (m.tab + 1) % tabCount
+		} else {
+			m.tab = (m.tab - 1 + tabCount) % tabCount
+		}
+		m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
+		m.refreshBindings()
+		m.resizeDetail()
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, func() tea.Msg { return RefreshMsg{} }
+	case key.Matches(msg, m.keys.Up):
+		m.detail.LineUp(1)
+		return m, nil
+	case key.Matches(msg, m.keys.Down):
+		m.detail.LineDown(1)
+		return m, nil
+	case key.Matches(msg, m.keys.End):
+		m.detail.GotoBottom()
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollDown):
+		m.detail.HalfPageDown()
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollUp):
+		m.detail.HalfPageUp()
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollPageDown):
+		m.detail.PageDown()
+		return m, nil
+	case key.Matches(msg, m.keys.ScrollPageUp):
+		m.detail.PageUp()
+		return m, nil
+	}
+	return m, nil
+}
+
+// refreshBindings updates per-binding Enabled state based on the current
+// focus and tab. Called whenever those change so help.Model only shows
+// the keys that actually fire in the current context.
+func (m *Model) refreshBindings() {
+	m.keys.Zoom.SetEnabled(m.focus == focusList)
+	m.keys.UnZoom.SetEnabled(m.focus == focusZoomedDetail)
+	m.keys.Toggle.SetEnabled(m.focus == focusList && m.tab == tabPlugins)
+}
+
+// resizeDetail re-applies viewport dimensions after a focus change.
+// Zoom mode gives the detail viewport the full terminal width.
+func (m *Model) resizeDetail() {
+	vw, vh := m.viewportDims()
+	m.detail.Width, m.detail.Height = vw, vh
 }
 
 func (m Model) View() string {
 	if !m.ready {
 		return "loading..."
 	}
+	if m.showHelp {
+		return m.renderHelp()
+	}
 	sep := styleMuted.Render(strings.Repeat("─", m.width))
+
+	var body string
+	if m.focus == focusZoomedDetail {
+		body = m.renderDetail()
+	} else {
+		body = lipgloss.JoinHorizontal(lipgloss.Top, m.renderList(), m.renderDetail())
+	}
+
 	return lipgloss.JoinVertical(lipgloss.Left,
 		m.renderHeader(),
 		sep,
-		lipgloss.JoinHorizontal(lipgloss.Top,
-			m.renderList(),
-			m.renderDetail(),
-		),
+		body,
 		m.renderStatus(),
 	)
+}
+
+// renderHelp is the ? overlay — a centered box listing context-aware
+// keybindings. Replaces the main view entirely while showHelp is true.
+func (m Model) renderHelp() string {
+	full := m.help
+	full.ShowAll = true
+	keys := contextKeys{keys: m.keys, focus: m.focus}
+
+	body := full.View(keys)
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorPrimary).
+		Padding(1, 2).
+		Render(
+			styleDetailTitle.Render("Keybindings") + "  " +
+				styleMuted.Render(m.helpContextLabel()) + "\n\n" +
+				body + "\n\n" +
+				styleMuted.Render("? / esc / q to close"),
+		)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+}
+
+func (m Model) helpContextLabel() string {
+	if m.focus == focusZoomedDetail {
+		return "(zoom mode)"
+	}
+	return "(browse mode)"
 }
 
 // ── rendering ────────────────────────────────────────────────────────────────
@@ -180,7 +378,14 @@ func (m Model) renderHeader() string {
 	var tabs []string
 	for i, name := range tabNames {
 		if tab(i) == m.tab {
-			tabs = append(tabs, styleTabActive.Render(name))
+			label := name
+			// Zoom mode bracket marker — signals that tabs are still reachable
+			// (Tab/h/l forgivingly exits zoom and switches) without losing the
+			// visual cue of which collection you're zoomed into.
+			if m.focus == focusZoomedDetail {
+				label = "[" + name + "]"
+			}
+			tabs = append(tabs, styleTabActive.Render(label))
 		} else {
 			tabs = append(tabs, styleTabInactive.Render(name))
 		}
@@ -258,19 +463,7 @@ func (m Model) renderStatus() string {
 		right = styleYellow.Render("warn: " + m.loadErr.Error())
 	}
 
-	hints := []hintPair{
-		{"↑↓/jk", "list"},
-		{"g/G", "top/end"},
-		{"hl/tab", "switch"},
-		{"PgUp/Dn", "scroll"},
-		{"r", "refresh"},
-	}
-	if m.tab == tabPlugins {
-		hints = append(hints, hintPair{"space", "toggle"})
-	}
-	hints = append(hints, hintPair{"q", "quit"})
-
-	hint := renderHints(hints)
+	hint := m.help.View(contextKeys{keys: m.keys, focus: m.focus})
 	pad := max(0, m.width-2-lipgloss.Width(hint)-lipgloss.Width(right))
 	bar := hint + strings.Repeat(" ", pad) + right
 
@@ -279,17 +472,6 @@ func (m Model) renderStatus() string {
 		Width(m.width).
 		Padding(0, 1).
 		Render(bar)
-}
-
-type hintPair struct{ key, desc string }
-
-func renderHints(pairs []hintPair) string {
-	sep := styleMuted.Render("  ·  ")
-	parts := make([]string, len(pairs))
-	for i, p := range pairs {
-		parts[i] = styleKey.Render(p.key) + styleMuted.Render(" "+p.desc)
-	}
-	return strings.Join(parts, sep)
 }
 
 // ── list rows ─────────────────────────────────────────────────────────────────
@@ -450,11 +632,14 @@ func (m Model) detailContent() string {
 			kv("Installed", p.InstalledAt()),
 		)
 		lines = append(lines, "", styleMuted.Render(strings.Repeat("─", m.detail.Width)))
-		lines = append(lines, pluginSection("Skills", p.SkillNames))
-		lines = append(lines, pluginSection("MCP Servers", mcpNames(p.MCPServers)))
-		lines = append(lines, pluginSection("Commands", p.Commands))
-		lines = append(lines, pluginSection("Agents", p.Agents))
-		lines = append(lines, pluginSection("Hooks", p.HookEvents))
+		sections := []sectionBlock{
+			{"Skills", p.SkillNames},
+			{"MCP Servers", mcpNames(p.MCPServers)},
+			{"Commands", p.Commands},
+			{"Agents", p.Agents},
+			{"Hooks", p.HookEvents},
+		}
+		lines = append(lines, renderPluginSections(sections, m.detail.Width))
 		claudeMD := "(none)"
 		if p.HasClaudeMD {
 			claudeMD = styleGreen.Render("yes")
@@ -534,7 +719,12 @@ func (m Model) panelH() int { return max(1, m.height-5) }
 // detailOuterDims returns the OUTER width and the INNER height of the detail pane.
 // (Asymmetric because the width minus listOuter is what's available; the height comes
 // from panelH which is already inner. Callers compute innerW = outerW - 2 when needed.)
+//
+// In zoom mode the detail pane fills the full terminal width — no list panel.
 func (m Model) detailOuterDims() (outerW, innerH int) {
+	if m.focus == focusZoomedDetail {
+		return m.width, m.panelH()
+	}
 	return m.width - m.listOuter(), m.panelH()
 }
 
@@ -653,6 +843,46 @@ func renderMarkdown(body string, width int) string {
 		return body
 	}
 	return strings.TrimSpace(out)
+}
+
+// sectionBlock is one labelled content group inside the plugin detail
+// (Skills, MCP Servers, Commands, etc.). renderPluginSections distributes
+// these across columns based on available width.
+type sectionBlock struct {
+	label string
+	items []string
+}
+
+// renderPluginSections lays out the plugin-detail sections in 1, 2, or 3
+// columns depending on innerW (see columnsForWidth). Multi-column layouts
+// pad each column to a uniform width with two-space inter-column gutters
+// so lipgloss.JoinHorizontal aligns the section labels across rows.
+func renderPluginSections(sections []sectionBlock, innerW int) string {
+	cols := columnsForWidth(innerW)
+	if len(cols) == 1 {
+		parts := make([]string, len(sections))
+		for i, s := range sections {
+			parts[i] = pluginSection(s.label, s.items)
+		}
+		return strings.Join(parts, "\n")
+	}
+
+	const gutter = 2
+	colWidth := (innerW - (len(cols)-1)*gutter) / len(cols)
+	if colWidth < 1 {
+		colWidth = 1
+	}
+	colStyle := lipgloss.NewStyle().Width(colWidth)
+
+	rendered := make([]string, len(cols))
+	for ci, indices := range cols {
+		parts := make([]string, 0, len(indices))
+		for _, si := range indices {
+			parts = append(parts, pluginSection(sections[si].label, sections[si].items))
+		}
+		rendered[ci] = colStyle.Render(strings.Join(parts, "\n"))
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, rendered...)
 }
 
 // pluginSection renders a labelled content group with a (none) fallback.
