@@ -40,8 +40,11 @@ func defaultKeys() keyMap {
 	return keyMap{
 		Up:             key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 		Down:           key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-		Top:            key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "top")),
-		End:            key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "end")),
+		// Top is handled inline by the vim-g chord state machine (vim.go) rather
+		// than via key.Matches — gg is a two-press combo, not a single binding.
+		// The binding is kept here only so help.Model renders "gg top" in the bar.
+		Top: key.NewBinding(key.WithHelp("gg", "top")),
+		End: key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "end")),
 		NextTab:        key.NewBinding(key.WithKeys("tab", "l"), key.WithHelp("tab/l", "next tab")),
 		PrevTab:        key.NewBinding(key.WithKeys("shift+tab", "h"), key.WithHelp("⇧tab/h", "prev tab")),
 		ScrollDown:     key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("^d", "scroll ½ down")),

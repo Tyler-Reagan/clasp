@@ -71,6 +71,7 @@ type Model struct {
 	detail    viewport.Model
 	help      help.Model
 	keys      keyMap
+	vimG      vimG // tracks the gg two-press chord
 	ready     bool
 	statusMsg string // transient feedback shown in the status bar
 }
@@ -149,6 +150,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// gg chord runs ahead of the main dispatch so single-g doesn't fire
+	// "go to top" on its own. Any non-g key cancels the chord (gContinue)
+	// and falls through to the regular handler.
+	switch m.vimG.step(msg.String()) {
+	case gWait:
+		return m, nil
+	case gTop:
+		m.cursors[m.tab] = 0
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, nil
+	}
+
 	switch {
 	case key.Matches(msg, m.keys.NextTab):
 		m.tab = (m.tab + 1) % tabCount
@@ -177,11 +191,6 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.detail.GotoTop()
 			m.detail.SetContent(m.detailContent())
 		}
-		return m, nil
-	case key.Matches(msg, m.keys.Top):
-		m.cursors[m.tab] = 0
-		m.detail.GotoTop()
-		m.detail.SetContent(m.detailContent())
 		return m, nil
 	case key.Matches(msg, m.keys.End):
 		m.cursors[m.tab] = max(0, m.listLen()-1)
