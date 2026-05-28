@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/tylerreagan/clasp/internal/state"
 )
@@ -361,7 +362,7 @@ func (m Model) detailContent() string {
 			kv("Project", projectLabel(e.Project)),
 			"",
 		}, "\n")
-		return header + styleMuted.Render(e.Body)
+		return header + renderMarkdown(e.Body, m.detail.Width)
 	}
 	return ""
 }
@@ -412,6 +413,26 @@ func projectLabel(encoded string) string {
 		return encoded
 	}
 	return strings.ReplaceAll(label, "-", "/")
+}
+
+// renderMarkdown renders body as markdown with word-wrap at width.
+// Falls back to plain text if glamour fails.
+func renderMarkdown(body string, width int) string {
+	if width <= 0 {
+		return body
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return body
+	}
+	out, err := r.Render(body)
+	if err != nil {
+		return body
+	}
+	return strings.TrimSpace(out)
 }
 
 func pluginToggleCmd(id string) tea.Cmd {
