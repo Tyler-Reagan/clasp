@@ -3,11 +3,14 @@
 A read-only terminal UI companion for [Claude Code](https://claude.ai/code) — think k9s, but for your AI coding session. Runs as a separate process (tmux pane, split terminal, etc.) and watches `~/.claude` state files in real time.
 
 ```
-clasp  ────────────────────────────────────── Sessions  Skills  Plugins  MCP  Memory
+████ █    ████ ████ ████        Sessions  Skills  Plugins  MCP  Memory
+█    █    █  █ █    █  █
+█    █    ████  ███ ████
+████ ████ █  █ ████ █
 ────────────────────────────────────────────────────────────────────────────────────
 ╭──────────────────────────────╮╭──────────────────────────────────────────────────╮
-│ ● 41667  ~/Projects          ││ Session                                           │
-│ ● 69607  ~/Projects/clasp    ││                                                   │
+│ ▌● 41667  ~/Projects         ││ Session                                           │
+│  ● 69607  ~/Projects/clasp   ││                                                   │
 │                              ││ PID:           41667                              │
 │                              ││ Session ID:    4bdf515e-70e7-4149-a535-abb788…   │
 │                              ││ CWD:           ~/Projects                         │
@@ -16,6 +19,8 @@ clasp  ────────────────────────�
 ╰──────────────────────────────╯╰──────────────────────────────────────────────────╯
  ↑↓/jk list · gg/G top/end · hl/tab switch · ^d/^u scroll · enter zoom · ? help · q quit
 ```
+
+The wordmark and accents render in **copper** (`#b87333`); body text is **parchment** (`#d4c5a0`), borders are **steel** (`#5c5c5c`). Warm dark theme, no cyan or sky blue in sight.
 
 ## Why
 
@@ -29,6 +34,7 @@ Claude Code's slash commands are powerful but disruptive mid-conversation. clasp
 - **MCP** — MCP servers contributed by plugins plus standalone servers from `settings.json` / `~/.claude.json`
 - **Memory** — all memory entries across projects, grouped by project, with type, description, and full body
 - **Zoom mode** — press `Enter` on any list row to expand the detail pane full-width for in-depth reading; `Esc` returns. Plugin detail re-flows into 2 or 3 columns at wide terminals so heavy plugins (vercel, etc.) stay readable without scrolling.
+- **Branded visual identity** — pixel-art "clasp" wordmark inspired by the Claude Code brand; custom warm palette (copper accent, parchment text, steel chrome) instead of generic Catppuccin defaults
 - **Context-sensitive help** — `?` opens an overlay listing the keybindings that fire in the current mode (browse vs zoom)
 - **Live updates** — `fsnotify` watches `~/.claude` and refreshes automatically on any change; tab-switch also triggers a fresh load
 - **Plugin toggle** — press `space` in the Plugins tab to enable/disable a plugin (the only write path; uses atomic temp-file + rename on `~/.claude/settings.json`)

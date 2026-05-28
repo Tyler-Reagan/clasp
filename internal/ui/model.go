@@ -79,11 +79,22 @@ type Model struct {
 
 func New() (*Model, error) {
 	st, err := state.Load()
+	h := help.New()
+	// Pull help.Model away from its default adaptive-gray styles into the
+	// warm palette: copper for key labels, muted parchment for descriptions
+	// and separators. The hint bar and the ? overlay both inherit this.
+	h.Styles.ShortKey = lipgloss.NewStyle().Foreground(colorCopper)
+	h.Styles.ShortDesc = lipgloss.NewStyle().Foreground(colorMutedParchment)
+	h.Styles.ShortSeparator = lipgloss.NewStyle().Foreground(colorMutedParchment)
+	h.Styles.FullKey = lipgloss.NewStyle().Foreground(colorCopper)
+	h.Styles.FullDesc = lipgloss.NewStyle().Foreground(colorMutedParchment)
+	h.Styles.FullSeparator = lipgloss.NewStyle().Foreground(colorMutedParchment)
+
 	m := &Model{
 		st:      st,
 		loadErr: err,
 		focus:   focusList,
-		help:    help.New(),
+		help:    h,
 		keys:    defaultKeys(),
 	}
 	// Zoom/UnZoom/Toggle enabled state depends on current focus and tab.
@@ -322,7 +333,8 @@ func (m *Model) resizeDetail() {
 
 func (m Model) View() string {
 	if !m.ready {
-		return "loading..."
+		return stylePrimary.Bold(true).Render("clasp") + " " +
+			styleMuted.Render("· reading ~/.claude…")
 	}
 	if m.showHelp {
 		return m.renderHelp()
@@ -342,6 +354,12 @@ func (m Model) View() string {
 		body,
 		m.renderStatus(),
 	)
+}
+
+// emptyState renders a uniform empty-list message — a muted leading glyph
+// plus the supplied label. Used per-tab when there's nothing to show.
+func emptyState(msg string) string {
+	return styleMuted.Render("· " + msg)
 }
 
 // renderHelp is the ? overlay — a centered box listing context-aware
@@ -374,6 +392,26 @@ func (m Model) helpContextLabel() string {
 
 // ── rendering ────────────────────────────────────────────────────────────────
 
+// wordmarkLines is the static 4-row pixel-art "clasp" wordmark. The styling
+// is loosely modeled on the Claude Code brand wordmark — chunky block letters
+// in the warm-spectrum copper accent. Each letter is 4 cells wide; the whole
+// wordmark is 24 cells wide.
+var wordmarkLines = []string{
+	"████ █    ████ ████ ████",
+	"█    █    █  █ █    █  █",
+	"█    █    ████  ███ ████",
+	"████ ████ █  █ ████ █   ",
+}
+
+func renderWordmark() string {
+	style := stylePrimary.Bold(true)
+	out := make([]string, len(wordmarkLines))
+	for i, l := range wordmarkLines {
+		out[i] = style.Render(l)
+	}
+	return strings.Join(out, "\n")
+}
+
 func (m Model) renderHeader() string {
 	var tabs []string
 	for i, name := range tabNames {
@@ -390,10 +428,23 @@ func (m Model) renderHeader() string {
 			tabs = append(tabs, styleTabInactive.Render(name))
 		}
 	}
-	title := styleTitle.Render("clasp")
+
+	wordmark := renderWordmark()
 	tabRow := strings.Join(tabs, "")
-	pad := max(0, m.width-lipgloss.Width(title)-lipgloss.Width(tabRow))
-	return title + strings.Repeat(" ", pad) + tabRow
+
+	wordmarkW := lipgloss.Width(wordmark)
+	wordmarkH := lipgloss.Height(wordmark)
+	padW := max(0, m.width-wordmarkW-lipgloss.Width(tabRow))
+
+	// Right column: pad the tab row to the right edge and bottom-align it
+	// against the wordmark so tabs sit on the baseline of the letterforms.
+	rightCol := lipgloss.PlaceVertical(
+		wordmarkH,
+		lipgloss.Bottom,
+		strings.Repeat(" ", padW)+tabRow,
+	)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, wordmark, rightCol)
 }
 
 func (m Model) renderList() string {
@@ -435,7 +486,7 @@ func (m Model) renderList() string {
 			line = styleMuted.Render(" " + label)
 		} else if i == cursorVisIdx {
 			label := truncate(r.label, labelW)
-			line = stylePrimary.Render("▶") + r.ind + " " + styleSelected.Render(label)
+			line = stylePrimary.Render("▌") + r.ind + " " + styleSelected.Render(label)
 		} else {
 			label := truncate(r.label, labelW)
 			line = " " + r.ind + " " + label
@@ -452,7 +503,14 @@ func (m Model) renderDetail() string {
 	outerW, innerH := m.detailOuterDims()
 	innerW := outerW - 2 // lipgloss border adds 2 columns
 	padded := lipgloss.NewStyle().Padding(0, 1).Render(m.detail.View())
-	return styleBorder.Width(innerW).Height(innerH).Render(padded)
+	border := styleBorder
+	// In zoom mode the detail pane is the user's entire focus — tint its
+	// border copper to reinforce that, distinguishing it from the muted
+	// steel border that the same panel wears in browse mode.
+	if m.focus == focusZoomedDetail {
+		border = border.BorderForeground(colorCopper)
+	}
+	return border.Width(innerW).Height(innerH).Render(padded)
 }
 
 func (m Model) renderStatus() string {
@@ -460,7 +518,7 @@ func (m Model) renderStatus() string {
 	if m.statusMsg != "" {
 		right = m.statusMsg
 	} else if m.loadErr != nil {
-		right = styleYellow.Render("warn: " + m.loadErr.Error())
+		right = styleRed.Render("⚠ " + m.loadErr.Error())
 	}
 
 	hint := m.help.View(contextKeys{keys: m.keys, focus: m.focus})
@@ -561,13 +619,13 @@ func (m Model) listLen() int {
 
 func (m Model) detailContent() string {
 	if m.st == nil {
-		return styleRed.Render("could not load ~/.claude state")
+		return styleRed.Render("⚠ could not load ~/.claude state")
 	}
 	c := m.cursors[m.tab]
 	switch m.tab {
 	case tabSessions:
 		if c >= len(m.st.Sessions) {
-			return styleMuted.Render("no active sessions")
+			return emptyState("no active sessions")
 		}
 		s := m.st.Sessions[c]
 		return strings.Join([]string{
@@ -582,7 +640,7 @@ func (m Model) detailContent() string {
 
 	case tabSkills:
 		if c >= len(m.st.Skills) {
-			return styleMuted.Render("no skills installed")
+			return emptyState("no skills installed")
 		}
 		sk := m.st.Skills[c]
 		lines := []string{styleDetailTitle.Render(sk.Name), ""}
@@ -606,7 +664,7 @@ func (m Model) detailContent() string {
 
 	case tabPlugins:
 		if c >= len(m.st.Plugins) {
-			return styleMuted.Render("no plugins installed")
+			return emptyState("no plugins installed")
 		}
 		p := m.st.Plugins[c]
 		statusStr := styleRed.Render("disabled")
@@ -649,7 +707,7 @@ func (m Model) detailContent() string {
 
 	case tabMCP:
 		if c >= len(m.st.MCPServers) {
-			return styleMuted.Render("no MCP servers configured")
+			return emptyState("no MCP servers configured")
 		}
 		srv := m.st.MCPServers[c]
 		lines := []string{
@@ -680,7 +738,7 @@ func (m Model) detailContent() string {
 			sel++
 		}
 		if memIdx < 0 || memIdx >= len(m.st.Memory) {
-			return styleMuted.Render("no memory entries")
+			return emptyState("no memory entries")
 		}
 		e := m.st.Memory[memIdx]
 		name := e.Name
@@ -709,12 +767,13 @@ func (m Model) listOuter() int { return 32 }
 
 // panelH is the inner content height (excluding border) for both panel boxes.
 //
-// Vertical stack: header(1) + separator(1) + panel outer(panelH+2) + status(1) = m.height
-//   → panel outer = m.height - 3
-//   → panel inner = panel outer - 2 = m.height - 5
+// Vertical stack: header(4) + separator(1) + panel outer(panelH+2) + status(1) = m.height
+//   → panel outer = m.height - 6
+//   → panel inner = panel outer - 2 = m.height - 8
 //
-// lipgloss v1 convention: styleBorder.Height(n) sets inner height to n; outer = n+2.
-func (m Model) panelH() int { return max(1, m.height-5) }
+// The header is 4 rows because it carries the pixel-art wordmark. lipgloss v1
+// convention: styleBorder.Height(n) sets inner height to n; outer = n+2.
+func (m Model) panelH() int { return max(1, m.height-8) }
 
 // detailOuterDims returns the OUTER width and the INNER height of the detail pane.
 // (Asymmetric because the width minus listOuter is what's available; the height comes
