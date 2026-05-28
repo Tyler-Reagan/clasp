@@ -244,9 +244,8 @@ func (m Model) renderList() string {
 }
 
 func (m Model) renderDetail() string {
-	outerW, outerH := m.detailOuterDims()
-	innerW := outerW - 2 // border adds 2
-	innerH := outerH     // Height() is inner in lipgloss v1.x; outer = innerH+2 but outerH already accounts for that — see panelH comment
+	outerW, innerH := m.detailOuterDims()
+	innerW := outerW - 2 // lipgloss border adds 2 columns
 	padded := lipgloss.NewStyle().Padding(0, 1).Render(m.detail.View())
 	return styleBorder.Width(innerW).Height(innerH).Render(padded)
 }
@@ -523,34 +522,35 @@ func (m Model) detailContent() string {
 // listOuter is the total column width of the list panel including its border.
 func (m Model) listOuter() int { return 32 }
 
-// panelH is the INNER content height for both panel boxes.
-// Accounting for all fixed rows: 1 header + 1 sep + 2 border rows (top+bottom) + 1 status = 5.
-// lipgloss v1.x Height() is inner; outer = inner+2. So panelH+2 = m.height-3 outer height.
-// Total: 1+1+(m.height-3)+1 = m.height. ✓
+// panelH is the inner content height (excluding border) for both panel boxes.
+//
+// Vertical stack: header(1) + separator(1) + panel outer(panelH+2) + status(1) = m.height
+//   → panel outer = m.height - 3
+//   → panel inner = panel outer - 2 = m.height - 5
+//
+// lipgloss v1 convention: styleBorder.Height(n) sets inner height to n; outer = n+2.
 func (m Model) panelH() int { return max(1, m.height-5) }
 
-// detailOuterDims returns the outer (including border) width and the INNER height for the detail pane.
-func (m Model) detailOuterDims() (w, h int) {
+// detailOuterDims returns the OUTER width and the INNER height of the detail pane.
+// (Asymmetric because the width minus listOuter is what's available; the height comes
+// from panelH which is already inner. Callers compute innerW = outerW - 2 when needed.)
+func (m Model) detailOuterDims() (outerW, innerH int) {
 	return m.width - m.listOuter(), m.panelH()
 }
 
-// viewportDims returns the viewport width/height.
-// Detail outer width = m.width - listOuter.
-// Detail inner width = outerW - 2 (border).
-// Viewport width = inner - 2 (Padding(0,1) left+right).
-// Viewport height = panelH - 2 (border top+bottom already in outer; but Height() is inner so
-// viewport fits within the inner space minus the Padding(0,0) height — no vertical padding, so
-// viewport height = panelH - 2 to leave room for the border rows that lipgloss adds on top).
+// viewportDims returns the viewport's content area inside the detail pane.
 //
-// Wait: styleBorder.Height(panelH) → inner=panelH, outer=panelH+2.
-// viewport fills the inner area. No vertical padding inside.
-// But the padded view uses Padding(0,1) (no vertical pad) wrapping the viewport view.
-// So viewport height should equal the inner height = panelH.
-// We set it to panelH-2 to leave a comfortable 2-row buffer so glamour content
-// doesn't push the border out.
+//	outerW  = m.width - listOuter
+//	innerW  = outerW - 2                  (border)
+//	vpW     = innerW - 2 = outerW - 4     (Padding(0, 1) left+right)
+//	vpH     = innerH - 2                  (defensive: see note below)
+//
+// The vpH = innerH - 2 buffer is empirical, not derivational: glamour-rendered markdown
+// on the Memory tab can produce a trailing line that pushes the border off-screen when
+// the viewport is sized to exactly innerH. Two-row buffer absorbs it.
 func (m Model) viewportDims() (w, h int) {
-	outerW, outerH := m.detailOuterDims()
-	return max(1, outerW-4), max(1, outerH-2)
+	outerW, innerH := m.detailOuterDims()
+	return max(1, outerW-4), max(1, innerH-2)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
