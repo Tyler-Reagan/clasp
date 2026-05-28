@@ -79,11 +79,22 @@ type Model struct {
 
 func New() (*Model, error) {
 	st, err := state.Load()
+	h := help.New()
+	// Pull help.Model away from its default adaptive-gray styles into the
+	// warm palette: copper for key labels, muted parchment for descriptions
+	// and separators. The hint bar and the ? overlay both inherit this.
+	h.Styles.ShortKey = lipgloss.NewStyle().Foreground(colorCopper)
+	h.Styles.ShortDesc = lipgloss.NewStyle().Foreground(colorMutedParchment)
+	h.Styles.ShortSeparator = lipgloss.NewStyle().Foreground(colorMutedParchment)
+	h.Styles.FullKey = lipgloss.NewStyle().Foreground(colorCopper)
+	h.Styles.FullDesc = lipgloss.NewStyle().Foreground(colorMutedParchment)
+	h.Styles.FullSeparator = lipgloss.NewStyle().Foreground(colorMutedParchment)
+
 	m := &Model{
 		st:      st,
 		loadErr: err,
 		focus:   focusList,
-		help:    help.New(),
+		help:    h,
 		keys:    defaultKeys(),
 	}
 	// Zoom/UnZoom/Toggle enabled state depends on current focus and tab.
@@ -468,7 +479,7 @@ func (m Model) renderList() string {
 			line = styleMuted.Render(" " + label)
 		} else if i == cursorVisIdx {
 			label := truncate(r.label, labelW)
-			line = stylePrimary.Render("▶") + r.ind + " " + styleSelected.Render(label)
+			line = stylePrimary.Render("▌") + r.ind + " " + styleSelected.Render(label)
 		} else {
 			label := truncate(r.label, labelW)
 			line = " " + r.ind + " " + label
@@ -485,7 +496,14 @@ func (m Model) renderDetail() string {
 	outerW, innerH := m.detailOuterDims()
 	innerW := outerW - 2 // lipgloss border adds 2 columns
 	padded := lipgloss.NewStyle().Padding(0, 1).Render(m.detail.View())
-	return styleBorder.Width(innerW).Height(innerH).Render(padded)
+	border := styleBorder
+	// In zoom mode the detail pane is the user's entire focus — tint its
+	// border copper to reinforce that, distinguishing it from the muted
+	// steel border that the same panel wears in browse mode.
+	if m.focus == focusZoomedDetail {
+		border = border.BorderForeground(colorCopper)
+	}
+	return border.Width(innerW).Height(innerH).Render(padded)
 }
 
 func (m Model) renderStatus() string {
