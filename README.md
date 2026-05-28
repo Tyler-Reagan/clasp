@@ -14,7 +14,7 @@ clasp  ────────────────────────�
 │                              ││ Status:        idle                               │
 │                              ││ Version:       2.1.152                            │
 ╰──────────────────────────────╯╰──────────────────────────────────────────────────╯
- ↑↓/jk list · g/G top/end · hl/tab switch · PgUp/Dn scroll · r refresh · q quit
+ ↑↓/jk list · gg/G top/end · hl/tab switch · ^d/^u scroll · enter zoom · ? help · q quit
 ```
 
 ## Why
@@ -28,6 +28,8 @@ Claude Code's slash commands are powerful but disruptive mid-conversation. clasp
 - **Plugins** — installed plugins with enabled/disabled status, install metadata, and bundled contents (skills, MCP servers, commands, agents, hooks)
 - **MCP** — MCP servers contributed by plugins plus standalone servers from `settings.json` / `~/.claude.json`
 - **Memory** — all memory entries across projects, grouped by project, with type, description, and full body
+- **Zoom mode** — press `Enter` on any list row to expand the detail pane full-width for in-depth reading; `Esc` returns. Plugin detail re-flows into 2 or 3 columns at wide terminals so heavy plugins (vercel, etc.) stay readable without scrolling.
+- **Context-sensitive help** — `?` opens an overlay listing the keybindings that fire in the current mode (browse vs zoom)
 - **Live updates** — `fsnotify` watches `~/.claude` and refreshes automatically on any change; tab-switch also triggers a fresh load
 - **Plugin toggle** — press `space` in the Plugins tab to enable/disable a plugin (the only write path; uses atomic temp-file + rename on `~/.claude/settings.json`)
 - **Otherwise zero interference** — never writes to or signals the Claude Code process
@@ -66,15 +68,34 @@ Start clasp in a separate terminal pane alongside your Claude Code session:
 clasp
 ```
 
+### Browse mode (default)
+
 | Key | Action |
 |---|---|
 | `j` / `k` or `↑` / `↓` | Navigate list |
-| `g` / `G` | Jump to top / end of list |
+| `gg` / `G` | Jump to top / end of list (vim-style two-press for top) |
 | `Tab` / `Shift+Tab` or `h` / `l` | Switch tabs (also reloads state) |
-| `PgUp` / `PgDn` | Scroll detail pane |
+| `Ctrl+D` / `Ctrl+U` | Scroll detail pane half-page down/up |
+| `Ctrl+F` / `Ctrl+B` | Scroll detail pane full-page down/up |
+| `Enter` | Zoom into the highlighted item (full-width detail) |
 | `space` | Toggle plugin on/off (Plugins tab only) |
 | `r` | Force refresh |
+| `?` | Help overlay |
 | `q` / `Ctrl+C` | Quit |
+
+### Zoom mode (after `Enter` on a list item)
+
+| Key | Action |
+|---|---|
+| `j` / `k` or `↑` / `↓` | Scroll detail line-by-line |
+| `gg` / `G` | Jump to top / bottom of detail |
+| `Ctrl+D` / `Ctrl+U` / `Ctrl+F` / `Ctrl+B` | Half- / full-page scroll |
+| `Tab` / `Shift+Tab` or `h` / `l` | Exit zoom AND switch tabs (lands in browse mode) |
+| `Esc` | Return to browse mode on the current tab |
+| `?` | Help overlay |
+| `q` / `Ctrl+C` | Quit |
+
+The active tab is wrapped in brackets (e.g. `[Plugins]`) while zoomed, so you keep the visual anchor that tabs are still reachable.
 
 ## How it works
 
@@ -100,7 +121,10 @@ clasp/
     │   ├── state.go             # reads and parses ~/.claude state files
     │   └── write.go             # plugin enable/disable writer (atomic rename)
     ├── ui/
-    │   ├── model.go             # Bubble Tea root model, layout, key handling
+    │   ├── model.go             # Bubble Tea root model, focus dispatch, layout
+    │   ├── keys.go              # keyMap (bubbles/key bindings) + contextKeys help wrapper
+    │   ├── vim.go               # gg two-press chord state machine
+    │   ├── columns.go           # plugin-detail multi-column breakpoints
     │   └── styles.go            # lipgloss palette
     └── watcher/watcher.go       # fsnotify → RefreshMsg on file changes
 ```
