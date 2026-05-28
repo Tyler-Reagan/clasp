@@ -72,6 +72,7 @@ type Model struct {
 	help      help.Model
 	keys      keyMap
 	vimG      vimG // tracks the gg two-press chord
+	showHelp  bool // ? overlay active; takes modal priority over focus dispatch
 	ready     bool
 	statusMsg string // transient feedback shown in the status bar
 }
@@ -85,8 +86,6 @@ func New() (*Model, error) {
 		help:    help.New(),
 		keys:    defaultKeys(),
 	}
-	// Help is still hidden until the ? overlay lands in task #14.
-	m.keys.Help.SetEnabled(false)
 	// Zoom/UnZoom/Toggle enabled state depends on current focus and tab.
 	m.refreshBindings()
 	return m, nil
@@ -128,13 +127,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		// Global keys: handled regardless of focus or future overlays.
-		// (Modal overlays — e.g. ? help — gain priority above this layer in task #14.)
+		// Modal priority: the ? overlay swallows keys before focus dispatch.
+		// ctrl+c still quits (universal kill); esc/?/q dismiss the overlay.
+		if m.showHelp {
+			return m.updateHelp(msg)
+		}
+
+		// Global keys: handled regardless of focus.
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
 		case key.Matches(msg, m.keys.Refresh):
 			return m, func() tea.Msg { return RefreshMsg{} }
+		case key.Matches(msg, m.keys.Help):
+			m.showHelp = true
+			return m, nil
 		}
 
 		// Focus-specific dispatch.
@@ -144,6 +151,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case focusZoomedDetail:
 			return m.updateZoom(msg)
 		}
+	}
+	return m, nil
+}
+
+// updateHelp handles keys while the ? overlay is shown. Modal: the overlay
+// fully captures input until dismissed. ctrl+c stays as an unconditional quit.
+func (m Model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "esc", "?", "q":
+		m.showHelp = false
+		return m, nil
 	}
 	return m, nil
 }
@@ -304,6 +324,9 @@ func (m Model) View() string {
 	if !m.ready {
 		return "loading..."
 	}
+	if m.showHelp {
+		return m.renderHelp()
+	}
 	sep := styleMuted.Render(strings.Repeat("─", m.width))
 
 	var body string
@@ -319,6 +342,34 @@ func (m Model) View() string {
 		body,
 		m.renderStatus(),
 	)
+}
+
+// renderHelp is the ? overlay — a centered box listing context-aware
+// keybindings. Replaces the main view entirely while showHelp is true.
+func (m Model) renderHelp() string {
+	full := m.help
+	full.ShowAll = true
+	keys := contextKeys{keys: m.keys, focus: m.focus}
+
+	body := full.View(keys)
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorPrimary).
+		Padding(1, 2).
+		Render(
+			styleDetailTitle.Render("Keybindings") + "  " +
+				styleMuted.Render(m.helpContextLabel()) + "\n\n" +
+				body + "\n\n" +
+				styleMuted.Render("? / esc / q to close"),
+		)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+}
+
+func (m Model) helpContextLabel() string {
+	if m.focus == focusZoomedDetail {
+		return "(zoom mode)"
+	}
+	return "(browse mode)"
 }
 
 // ── rendering ────────────────────────────────────────────────────────────────
@@ -412,7 +463,7 @@ func (m Model) renderStatus() string {
 		right = styleYellow.Render("warn: " + m.loadErr.Error())
 	}
 
-	hint := m.help.View(m.keys)
+	hint := m.help.View(contextKeys{keys: m.keys, focus: m.focus})
 	pad := max(0, m.width-2-lipgloss.Width(hint)-lipgloss.Width(right))
 	bar := hint + strings.Repeat(" ", pad) + right
 

@@ -60,19 +60,48 @@ func defaultKeys() keyMap {
 	}
 }
 
-// ShortHelp is what shows in the always-visible hint bar. Order matters:
-// each binding renders with its WithHelp label. Disabled bindings are skipped.
-func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Top, k.End, k.NextTab, k.Refresh, k.Help, k.Quit}
+// contextKeys is a help.KeyMap wrapper that returns focus-aware help
+// content. In browse vs zoom mode the same physical key has different
+// semantics (j scrolls list vs. j scrolls detail), so help text must
+// vary by context. Pass to help.Model.View as contextKeys{keys, focus}.
+type contextKeys struct {
+	keys  keyMap
+	focus focus
 }
 
-// FullHelp is the ? overlay layout. Context-sensitive variants come in task #14.
-func (k keyMap) FullHelp() [][]key.Binding {
+// ShortHelp is the always-visible hint bar. Disabled bindings are skipped
+// by help.Model. Order = display order, left to right.
+func (c contextKeys) ShortHelp() []key.Binding {
+	k := c.keys
+	if c.focus == focusZoomedDetail {
+		// Re-label the navigation pair for the zoom context. We mutate copies
+		// (Binding is a value type) so the underlying keyMap is untouched.
+		up, down := k.Up, k.Down
+		up.SetHelp("↑/k", "scroll up")
+		down.SetHelp("↓/j", "scroll down")
+		return []key.Binding{up, down, k.Top, k.End, k.NextTab, k.UnZoom, k.Help, k.Quit}
+	}
+	return []key.Binding{k.Up, k.Down, k.Top, k.End, k.NextTab, k.Zoom, k.Refresh, k.Help, k.Quit}
+}
+
+// FullHelp is the ? overlay layout — column groups.
+func (c contextKeys) FullHelp() [][]key.Binding {
+	k := c.keys
+	if c.focus == focusZoomedDetail {
+		up, down := k.Up, k.Down
+		up.SetHelp("↑/k", "scroll up")
+		down.SetHelp("↓/j", "scroll down")
+		return [][]key.Binding{
+			{up, down, k.Top, k.End},
+			{k.ScrollDown, k.ScrollUp, k.ScrollPageDown, k.ScrollPageUp},
+			{k.NextTab, k.PrevTab, k.UnZoom},
+			{k.Refresh, k.Help, k.Quit},
+		}
+	}
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Top, k.End},
-		{k.NextTab, k.PrevTab, k.Toggle},
+		{k.NextTab, k.PrevTab, k.Zoom},
 		{k.ScrollDown, k.ScrollUp, k.ScrollPageDown, k.ScrollPageUp},
-		{k.Zoom, k.UnZoom},
-		{k.Refresh, k.Help, k.Quit},
+		{k.Toggle, k.Refresh, k.Help, k.Quit},
 	}
 }
