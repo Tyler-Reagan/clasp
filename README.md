@@ -3,7 +3,7 @@
 A read-only terminal UI companion for [Claude Code](https://claude.ai/code) — think k9s, but for your AI coding session. Runs as a separate process (tmux pane, split terminal, etc.) and watches `~/.claude` state files in real time.
 
 ```
-clasp  ──────────────────────────────────────────── Sessions  Skills  Plugins  Memory
+clasp  ────────────────────────────────────── Sessions  Skills  Plugins  MCP  Memory
 ────────────────────────────────────────────────────────────────────────────────────
 ╭──────────────────────────────╮╭──────────────────────────────────────────────────╮
 │ ● 41667  ~/Projects          ││ Session                                           │
@@ -14,7 +14,7 @@ clasp  ────────────────────────�
 │                              ││ Status:        idle                               │
 │                              ││ Version:       2.1.152                            │
 ╰──────────────────────────────╯╰──────────────────────────────────────────────────╯
- ↑↓/jk navigate  tab/hl switch  PgUp/PgDn scroll detail  r refresh  q quit
+ ↑↓/jk list · g/G top/end · hl/tab switch · PgUp/Dn scroll · r refresh · q quit
 ```
 
 ## Why
@@ -24,11 +24,13 @@ Claude Code's slash commands are powerful but disruptive mid-conversation. clasp
 ## Features
 
 - **Sessions** — live view of active Claude Code sessions (PID, CWD, status, version)
-- **Skills** — browse all installed skills with name, description, and version
-- **Plugins** — installed plugins with enabled/disabled status and install metadata
-- **Memory** — all memory entries across projects, with type, description, and full body
-- **Live updates** — `fsnotify` watches `~/.claude` and refreshes automatically on any change
-- **Zero interference** — read-only; never writes to or signals the Claude Code process
+- **Skills** — browse all installed skills with description, source path, and SKILL.md preview
+- **Plugins** — installed plugins with enabled/disabled status, install metadata, and bundled contents (skills, MCP servers, commands, agents, hooks)
+- **MCP** — MCP servers contributed by plugins plus standalone servers from `settings.json` / `~/.claude.json`
+- **Memory** — all memory entries across projects, grouped by project, with type, description, and full body
+- **Live updates** — `fsnotify` watches `~/.claude` and refreshes automatically on any change; tab-switch also triggers a fresh load
+- **Plugin toggle** — press `space` in the Plugins tab to enable/disable a plugin (the only write path; uses atomic temp-file + rename on `~/.claude/settings.json`)
+- **Otherwise zero interference** — never writes to or signals the Claude Code process
 
 ## Requirements
 
@@ -67,8 +69,10 @@ clasp
 | Key | Action |
 |---|---|
 | `j` / `k` or `↑` / `↓` | Navigate list |
-| `Tab` / `Shift+Tab` or `h` / `l` | Switch tabs |
+| `g` / `G` | Jump to top / end of list |
+| `Tab` / `Shift+Tab` or `h` / `l` | Switch tabs (also reloads state) |
 | `PgUp` / `PgDn` | Scroll detail pane |
+| `space` | Toggle plugin on/off (Plugins tab only) |
 | `r` | Force refresh |
 | `q` / `Ctrl+C` | Quit |
 
@@ -79,8 +83,9 @@ clasp reads state directly from the files Claude Code writes to `~/.claude`:
 | Tab | Source |
 |---|---|
 | Sessions | `~/.claude/sessions/<pid>.json` |
-| Skills | `~/.claude/skills/*/meta.json` |
-| Plugins | `~/.claude/plugins/installed_plugins.json` + `settings.json` |
+| Skills | `~/.claude/skills/*/SKILL.md` (follows symlinks) |
+| Plugins | `~/.claude/plugins/installed_plugins.json` + `settings.json` + each plugin's `.claude-plugin/plugin.json`, `.mcp.json`, `skills/`, `hooks/hooks.json`, `commands/`, `agents/` |
+| MCP | each plugin's `.mcp.json` + top-level `mcpServers` in `~/.claude/settings.json` and `~/.claude.json` |
 | Memory | `~/.claude/projects/*/memory/*.md` |
 
 A background goroutine uses `fsnotify` to watch these directories and sends a refresh message to the UI on any change.
@@ -91,7 +96,9 @@ A background goroutine uses `fsnotify` to watch these directories and sends a re
 clasp/
 ├── main.go                      # entry point; starts watcher goroutine
 └── internal/
-    ├── state/state.go           # reads and parses ~/.claude state files
+    ├── state/
+    │   ├── state.go             # reads and parses ~/.claude state files
+    │   └── write.go             # plugin enable/disable writer (atomic rename)
     ├── ui/
     │   ├── model.go             # Bubble Tea root model, layout, key handling
     │   └── styles.go            # lipgloss palette
@@ -100,20 +107,21 @@ clasp/
 
 ## Roadmap
 
-**Milestone 1 — read-only viewport** ✓ _(current)_
+**Milestone 1 — read-only viewport** ✓
 - [x] Sessions tab — live PID, CWD, status, version
-- [x] Skills tab — installed skills with description and version
-- [x] Plugins tab — installed plugins with enabled/disabled state
-- [x] Memory tab — all project memory entries with full body
-- [x] fsnotify live refresh on any `~/.claude` change
+- [x] Skills tab — installed skills with description, source path, and preview
+- [x] Plugins tab — installed plugins with enabled/disabled state and bundled contents
+- [x] MCP tab — MCP servers from plugins and from `~/.claude/settings.json` / `~/.claude.json`
+- [x] Memory tab — all project memory entries with full body, grouped by project
+- [x] fsnotify live refresh on any `~/.claude` change; tab-switch also reloads
 
-**Milestone 2 — first write action** ✓ _(current)_
+**Milestone 2 — first write action** ✓
 - [x] Toggle a plugin on/off with `space` in the Plugins tab (modifies `~/.claude/settings.json`)
 
 **Later**
-- [ ] MCP server status panel
 - [ ] Session history / command log viewer
 - [ ] Token and cost metrics from session JSONL
+- [ ] Dismissable error popup (k9s-style) for surfacing aggregated loader errors
 
 ## Built with
 
