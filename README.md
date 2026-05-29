@@ -48,23 +48,33 @@ Claude Code's slash commands are powerful but disruptive mid-conversation. clasp
 
 ## Installation
 
-```bash
-git clone https://github.com/Tyler-Reagan/clasp
-cd clasp
-go build -o clasp .
-```
-
-Move the binary somewhere on your `$PATH`:
+### Homebrew (macOS)
 
 ```bash
-mv clasp /usr/local/bin/clasp
+brew install tyler-reagan/tap/clasp
 ```
 
-Or install directly with `go install`:
+This installs a prebuilt `clasp` binary onto your `$PATH`. Upgrade with `brew upgrade clasp`.
+
+### go install (macOS / Linux)
 
 ```bash
 go install github.com/tylerreagan/clasp@latest
 ```
+
+### From source
+
+```bash
+git clone https://github.com/Tyler-Reagan/clasp
+cd clasp
+go build -o clasp .
+mv clasp /usr/local/bin/clasp   # or anywhere on your $PATH
+```
+
+Linux users: Homebrew casks are macOS-only, so use `go install` or grab a prebuilt
+tarball from the [releases page](https://github.com/Tyler-Reagan/clasp/releases).
+
+Check your version any time with `clasp --version`.
 
 ## Usage
 
