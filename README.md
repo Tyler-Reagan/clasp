@@ -1,6 +1,6 @@
 # clasp
 
-A read-only terminal UI companion for [Claude Code](https://claude.ai/code) — think k9s, but for your AI coding session. Runs as a separate process (tmux pane, split terminal, etc.) and watches `~/.claude` state files in real time.
+A read-only terminal UI companion for [Claude Code](https://claude.ai/code) — Runs as a separate process (tmux pane, split terminal, etc.) and watches `~/.claude` state files in real time.
 
 ```
 ████ █    ████ ████ ████
