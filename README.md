@@ -54,7 +54,7 @@ Claude Code's slash commands are powerful but disruptive mid-conversation. clasp
 brew install tyler-reagan/tap/clasp
 ```
 
-This installs a prebuilt `clasp` binary onto your `$PATH`. Upgrade with `brew upgrade clasp`.
+This installs a prebuilt `clasp` binary onto your `$PATH`. Upgrade with `brew upgrade tyler-reagan/tap/clasp`.
 
 ### go install (macOS / Linux)
 
