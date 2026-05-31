@@ -31,7 +31,7 @@ Claude Code's slash commands are powerful but disruptive mid-conversation. clasp
 - **Sessions** — live view of active Claude Code sessions (PID, CWD, status, version)
 - **Skills** — browse all installed skills with description, source path, and SKILL.md preview
 - **Plugins** — installed plugins with enabled/disabled status, install metadata, and bundled contents (skills, MCP servers, commands, agents, hooks)
-- **MCP** — MCP servers contributed by plugins plus standalone servers from `settings.json` / `~/.claude.json`
+- **MCP** — all MCP servers: plugin-bundled servers, standalone entries from `settings.json` / `settings.local.json`, account-level integrations from `~/.claude.json` (`claudeAiMcpEverConnected`), and servers awaiting OAuth from `mcp-needs-auth-cache.json`
 - **Memory** — all memory entries across projects, grouped by project, with type, description, and full body
 - **Zoom mode** — press `Enter` on any list row to expand the detail pane full-width for in-depth reading; `Esc` returns. Plugin detail re-flows into 2 or 3 columns at wide terminals so heavy plugins (vercel, etc.) stay readable without scrolling.
 - **Branded visual identity** — pixel-art "clasp" wordmark inspired by the Claude Code brand; custom warm palette (copper accent, parchment text, steel chrome) instead of generic Catppuccin defaults
@@ -122,7 +122,7 @@ clasp reads state directly from the files Claude Code writes to `~/.claude`:
 | Sessions | `~/.claude/sessions/<pid>.json` |
 | Skills | `~/.claude/skills/*/SKILL.md` (follows symlinks) |
 | Plugins | `~/.claude/plugins/installed_plugins.json` + `settings.json` + each plugin's `.claude-plugin/plugin.json`, `.mcp.json`, `skills/`, `hooks/hooks.json`, `commands/`, `agents/` |
-| MCP | each plugin's `.mcp.json` + top-level `mcpServers` in `~/.claude/settings.json` and `~/.claude.json` |
+| MCP | each plugin's `.mcp.json` + `mcpServers` in `~/.claude/settings.json`, `~/.claude/settings.local.json`, `~/.claude.json` + `claudeAiMcpEverConnected` in `~/.claude.json` + `~/.claude/mcp-needs-auth-cache.json` |
 | Memory | `~/.claude/projects/*/memory/*.md` |
 
 A background goroutine uses `fsnotify` to watch these directories and sends a refresh message to the UI on any change.
@@ -151,7 +151,7 @@ clasp/
 - [x] Sessions tab — live PID, CWD, status, version
 - [x] Skills tab — installed skills with description, source path, and preview
 - [x] Plugins tab — installed plugins with enabled/disabled state and bundled contents
-- [x] MCP tab — MCP servers from plugins and from `~/.claude/settings.json` / `~/.claude.json`
+- [x] MCP tab — MCP servers from plugins, standalone config files, account-level claude.ai integrations, and needs-auth servers
 - [x] Memory tab — all project memory entries with full body, grouped by project
 - [x] fsnotify live refresh on any `~/.claude` change; tab-switch also reloads
 

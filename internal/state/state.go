@@ -449,7 +449,8 @@ func fileExists(path string) bool {
 }
 
 // loadStandaloneMCPServers appends MCP servers declared outside of any plugin —
-// the top-level mcpServers object in ~/.claude/settings.json and ~/.claude.json.
+// the top-level mcpServers object in settings files, account-level MCPs from
+// ~/.claude.json, and servers pending auth in mcp-needs-auth-cache.json.
 // Plugin-provided names take precedence: a standalone entry with the same name is skipped.
 // Must run after loadPlugins so pluginProvided is populated.
 func loadStandaloneMCPServers(dir string, s *State) error {
@@ -461,6 +462,7 @@ func loadStandaloneMCPServers(dir string, s *State) error {
 	home, _ := os.UserHomeDir()
 	paths := []string{
 		filepath.Join(dir, "settings.json"),
+		filepath.Join(dir, "settings.local.json"),
 		filepath.Join(home, ".claude.json"),
 	}
 
@@ -475,6 +477,22 @@ func loadStandaloneMCPServers(dir string, s *State) error {
 			if seen[srv.Name] || pluginProvided[srv.Name] {
 				continue
 			}
+			seen[srv.Name] = true
+			standalone = append(standalone, srv)
+		}
+	}
+
+	// Account-level MCPs connected via claude.ai (stored in ~/.claude.json).
+	for _, srv := range readClaudeAiMCPServers(filepath.Join(home, ".claude.json")) {
+		if !seen[srv.Name] && !pluginProvided[srv.Name] {
+			seen[srv.Name] = true
+			standalone = append(standalone, srv)
+		}
+	}
+
+	// MCPs that are configured but awaiting OAuth (mcp-needs-auth-cache.json).
+	for _, srv := range readMCPNeedsAuthServers(filepath.Join(dir, "mcp-needs-auth-cache.json")) {
+		if !seen[srv.Name] && !pluginProvided[srv.Name] {
 			seen[srv.Name] = true
 			standalone = append(standalone, srv)
 		}
@@ -507,6 +525,47 @@ func readStandaloneMCPFile(path string) ([]MCPServer, error) {
 		servers = append(servers, MCPServer{Name: name, Type: cfg.Type, URL: cfg.URL})
 	}
 	return servers, nil
+}
+
+// readClaudeAiMCPServers reads the claudeAiMcpEverConnected list from ~/.claude.json,
+// which records MCPs connected through the user's claude.ai account.
+func readClaudeAiMCPServers(path string) []MCPServer {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var raw struct {
+		Connected []string `json:"claudeAiMcpEverConnected"`
+	}
+	if json.Unmarshal(data, &raw) != nil {
+		return nil
+	}
+	servers := make([]MCPServer, 0, len(raw.Connected))
+	for _, name := range raw.Connected {
+		servers = append(servers, MCPServer{Name: name, Type: "claude.ai"})
+	}
+	return servers
+}
+
+// readMCPNeedsAuthServers reads mcp-needs-auth-cache.json and returns any
+// account-level servers (those prefixed "claude.ai ") that require OAuth.
+func readMCPNeedsAuthServers(path string) []MCPServer {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(data, &raw) != nil {
+		return nil
+	}
+	var servers []MCPServer
+	for name := range raw {
+		if strings.HasPrefix(name, "claude.ai ") {
+			servers = append(servers, MCPServer{Name: name, Type: "claude.ai"})
+		}
+	}
+	sort.Slice(servers, func(i, j int) bool { return servers[i].Name < servers[j].Name })
+	return servers
 }
 
 func loadMemory(dir string, s *State) error {
