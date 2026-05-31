@@ -109,7 +109,7 @@ func Load() (*State, error) {
 	var firstErr error
 
 	for _, fn := range []func(string, *State) error{
-		loadSessions, loadSkills, loadPlugins, loadStandaloneMCPServers, loadMemory,
+		loadSessions, loadSkills, loadPlugins, loadStandaloneMCPServers, loadProjectMCPServers, loadMemory,
 	} {
 		if err := fn(dir, s); err != nil && firstErr == nil {
 			firstErr = err
@@ -566,6 +566,74 @@ func readMCPNeedsAuthServers(path string) []MCPServer {
 	}
 	sort.Slice(servers, func(i, j int) bool { return servers[i].Name < servers[j].Name })
 	return servers
+}
+
+// loadProjectMCPServers scans each known project directory for MCP servers that
+// are scoped to that project rather than declared globally:
+//   - .claude/launch.json present → Claude Code auto-provisions a "Claude Preview" MCP
+//   - .mcp.json → mcpServers block
+//   - .claude/settings.json and .claude/settings.local.json → mcpServers block
+//
+// Project paths are derived by converting the encoded directory name back to a
+// filesystem path (hyphens → slashes). Paths that don't resolve to a real
+// directory are silently skipped.
+func loadProjectMCPServers(dir string, s *State) error {
+	existing := make(map[string]bool, len(s.MCPServers))
+	for _, srv := range s.MCPServers {
+		existing[srv.Name] = true
+	}
+
+	projectsDir := filepath.Join(dir, "projects")
+	entries, err := os.ReadDir(projectsDir)
+	if err != nil {
+		return nil // projects dir missing is not an error
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		// Decode encoded project path: "-Users-foo-bar" → "/Users/foo/bar"
+		projectPath := strings.ReplaceAll(entry.Name(), "-", "/")
+		if !fileExists(projectPath) {
+			continue
+		}
+		projectName := filepath.Base(projectPath)
+
+		// .claude/launch.json → Claude Code auto-provisions Claude Preview MCP
+		if fileExists(filepath.Join(projectPath, ".claude", "launch.json")) {
+			name := "Claude Preview (" + projectName + ")"
+			if !existing[name] {
+				existing[name] = true
+				s.MCPServers = append(s.MCPServers, MCPServer{
+					Name:   name,
+					Type:   "built-in",
+					Plugin: projectName,
+				})
+			}
+		}
+
+		// .mcp.json and .claude/settings{,.local}.json
+		for _, cfgPath := range []string{
+			filepath.Join(projectPath, ".mcp.json"),
+			filepath.Join(projectPath, ".claude", "settings.json"),
+			filepath.Join(projectPath, ".claude", "settings.local.json"),
+		} {
+			servers, err := readStandaloneMCPFile(cfgPath)
+			if err != nil {
+				continue
+			}
+			for _, srv := range servers {
+				if existing[srv.Name] {
+					continue
+				}
+				existing[srv.Name] = true
+				srv.Plugin = projectName
+				s.MCPServers = append(s.MCPServers, srv)
+			}
+		}
+	}
+	return nil
 }
 
 func loadMemory(dir string, s *State) error {
