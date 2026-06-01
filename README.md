@@ -1,6 +1,6 @@
 # clasp
 
-A read-only terminal UI companion for [Claude Code](https://claude.ai/code) — Runs as a separate process (tmux pane, split terminal, etc.) and watches `~/.claude` state files in real time.
+A near read-only terminal UI companion for [Claude Code](https://claude.ai/code) — Runs as a separate process (tmux pane, split terminal, etc.) and watches `~/.claude` state files in real time. It observes; the only writes are two deliberate, opt-in actions (toggle a plugin, delete a memory) that touch `~/.claude` files atomically and never signal the Claude Code process.
 
 ```
 ████ █    ████ ████ ████
@@ -24,7 +24,7 @@ The wordmark and accents render in **copper** (`#b87333`); body text is **parchm
 
 ## Why
 
-Claude Code's slash commands are powerful but disruptive mid-conversation. clasp surfaces skills, plugins, and session state in a dedicated pane so you can browse and inspect without injecting anything into your active session. It never touches the Claude Code process — it only reads files.
+Claude Code's slash commands are powerful but disruptive mid-conversation. clasp surfaces skills, plugins, and session state in a dedicated pane so you can browse and inspect without injecting anything into your active session. It never signals or writes to the Claude Code process itself; its two write actions (toggling a plugin, trashing a memory) touch only `~/.claude` config/state files, atomically.
 
 ## Features
 
@@ -37,8 +37,9 @@ Claude Code's slash commands are powerful but disruptive mid-conversation. clasp
 - **Branded visual identity** — pixel-art "clasp" wordmark inspired by the Claude Code brand; custom warm palette (copper accent, parchment text, steel chrome) instead of generic Catppuccin defaults
 - **Context-sensitive help** — `?` opens an overlay listing the keybindings that fire in the current mode (browse vs zoom)
 - **Live updates** — `fsnotify` watches `~/.claude` and refreshes automatically on any change; tab-switch also triggers a fresh load
-- **Plugin toggle** — press `space` in the Plugins tab to enable/disable a plugin (the only write path; uses atomic temp-file + rename on `~/.claude/settings.json`)
-- **Otherwise zero interference** — never writes to or signals the Claude Code process
+- **Plugin toggle** — press `space` in the Plugins tab to enable/disable a plugin (atomic temp-file + rename on `~/.claude/settings.json`)
+- **Memory delete** — press `d` in the Memory tab to remove an entry: confirm with `y` and the `.md` file moves to the macOS Trash (recoverable in Finder), with its pointer line pruned from `MEMORY.md` in the same step. `MEMORY.md` itself is the index and is never deletable. The only destructive action clasp offers, and the only one gated behind a confirmation.
+- **Otherwise zero interference** — those two `~/.claude` writes aside, clasp never writes to or signals the Claude Code process
 
 ## Requirements
 
@@ -95,6 +96,7 @@ clasp
 | `Ctrl+F` / `Ctrl+B` | Scroll detail pane full-page down/up |
 | `Enter` | Zoom into the highlighted item (full-width detail) |
 | `space` | Toggle plugin on/off (Plugins tab only) |
+| `d` | Delete memory entry → macOS Trash (Memory tab only; confirm with `y`) |
 | `r` | Force refresh |
 | `?` | Help overlay |
 | `q` / `Ctrl+C` | Quit |
@@ -168,6 +170,9 @@ clasp/
 - [x] Custom warm palette (copper accent, parchment text, steel chrome)
 - [x] Pixel-art "clasp" wordmark inspired by the Claude Code brand
 - [x] Branded loading / empty / error states
+
+**Milestone 5 — first destructive action** ✓
+- [x] Delete a memory entry with `d` in the Memory tab: `y`-gated confirmation, file → macOS Trash, `MEMORY.md` index line pruned in the same step; the index file itself is never deletable
 
 **Later** — polish opportunities tracked in [open issues](https://github.com/Tyler-Reagan/clasp/issues):
 - Wordmark offset-shadow effect, scroll-percentage indicator, clipboard yank, small-terminal degradation, parse-warning surfacing, `CLAUDE.md` for the repo, terminal screenshot, glamour render caching
