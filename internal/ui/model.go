@@ -703,7 +703,7 @@ func (m Model) detailContent() string {
 			"",
 			kv("PID", fmt.Sprintf("%d", s.PID)),
 			kv("Session ID", s.SessionID),
-			kv("CWD", shortPath(s.CWD)),
+			kvWrap("CWD", shortPath(s.CWD), m.detail.Width),
 			kv("Status", s.Status),
 			kv("Version", s.Version),
 		}, "\n")
@@ -912,6 +912,17 @@ func wrapWords(s string, width int) []string {
 	current := ""
 	for _, w := range words {
 		wLen := len([]rune(w))
+		if wLen > width {
+			// a single word wider than the line (usually a path): flush the
+			// current line, then break the word so nothing is clipped
+			if current != "" {
+				lines = append(lines, current)
+			}
+			pieces := breakWord(w, width)
+			lines = append(lines, pieces[:len(pieces)-1]...)
+			current = pieces[len(pieces)-1]
+			continue
+		}
 		if current == "" {
 			current = w
 		} else if len([]rune(current))+1+wLen <= width {
@@ -925,6 +936,25 @@ func wrapWords(s string, width int) []string {
 		lines = append(lines, current)
 	}
 	return lines
+}
+
+// breakWord splits w into pieces of at most width runes, preferring to cut
+// just after a "/" so paths break at directory boundaries.
+func breakWord(w string, width int) []string {
+	r := []rune(w)
+	var out []string
+	for len(r) > width {
+		cut := width
+		for i := width - 1; i > 0; i-- {
+			if r[i] == '/' {
+				cut = i + 1
+				break
+			}
+		}
+		out = append(out, string(r[:cut]))
+		r = r[cut:]
+	}
+	return append(out, string(r))
 }
 
 func shortPath(p string) string {

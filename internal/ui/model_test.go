@@ -18,7 +18,9 @@ func TestWrapWords(t *testing.T) {
 		{"width zero returns input as-is", "hello world", 0, []string{"hello world"}},
 		{"single line fits", "hello world", 20, []string{"hello world"}},
 		{"wraps at word boundary", "the quick brown fox", 10, []string{"the quick", "brown fox"}},
-		{"single word longer than width still emitted", "supercalifragilistic", 5, []string{"supercalifragilistic"}},
+		{"single word longer than width is broken", "supercalifragilistic", 5, []string{"super", "calif", "ragil", "istic"}},
+		{"long path breaks after a slash", "~/Projects/trip-kraken-swift/.claude/worktrees", 20, []string{"~/Projects/", "trip-kraken-swift/", ".claude/worktrees"}},
+		{"long word after short word starts a new line", "CWD ~/a/bbbbbbbbbb/c", 8, []string{"CWD", "~/a/", "bbbbbbbb", "bb/c"}},
 		{"multiple wraps", "a b c d e f g h", 3, []string{"a b", "c d", "e f", "g h"}},
 	}
 	for _, tt := range tests {
