@@ -6,7 +6,7 @@ A near read-only terminal UI companion for [Claude Code](https://claude.ai/code)
 ████ █    ████ ████ ████
 █    █    █  █ █    █  █
 █    █    ████  ███ ████
-████ ████ █  █ ████ █                         Sessions  Skills  Plugins  MCP  Memory
+████ ████ █  █ ████ █               Sessions  Skills  Plugins  MCP  Memory  Settings
 ────────────────────────────────────────────────────────────────────────────────────
 ╭──────────────────────────────╮╭──────────────────────────────────────────────────╮
 │ ▌● 41667  ~/Projects         ││ Session                                          │
@@ -33,6 +33,7 @@ Claude Code's slash commands are powerful but disruptive mid-conversation. clasp
 - **Plugins** — installed plugins with enabled/disabled status, install metadata, and bundled contents (skills, MCP servers, commands, agents, hooks)
 - **MCP** — all MCP servers: plugin-bundled servers, standalone entries from `settings.json` / `settings.local.json`, account-level integrations from `~/.claude.json` (`claudeAiMcpEverConnected`), and servers awaiting OAuth from `mcp-needs-auth-cache.json`
 - **Memory** — all memory entries across projects, grouped by project, with type, description, and full body
+- **Settings** — every Claude Code setting you have set, with a one-sentence description, its effective value, the file that supplied it, and every other file that also sets it (managed, project local, project, user, and the documented keys in `~/.claude.json`). List keys such as `permissions.allow` show each entry with its source, and `Read`/`Edit` rules that point at paths that no longer exist are flagged. Press `a` to browse all documented keys with their defaults, and `p` to pick which project's settings apply (default: the most recent active session)
 - **Zoom mode** — press `Enter` on any list row to expand the detail pane full-width for in-depth reading; `Esc` returns. Plugin detail re-flows into 2 or 3 columns at wide terminals so heavy plugins (vercel, etc.) stay readable without scrolling.
 - **Branded visual identity** — pixel-art "clasp" wordmark inspired by the Claude Code brand; custom warm palette (copper accent, parchment text, steel chrome) instead of generic Catppuccin defaults
 - **Context-sensitive help** — `?` opens an overlay listing the keybindings that fire in the current mode (browse vs zoom)
@@ -97,6 +98,8 @@ clasp
 | `Enter` | Zoom into the highlighted item (full-width detail) |
 | `space` | Toggle plugin on/off (Plugins tab only) |
 | `d` | Delete memory entry → macOS Trash (Memory tab only; confirm with `y`) |
+| `a` | Show all documented keys / only set keys (Settings tab only) |
+| `p` | Pick the project whose settings apply (Settings tab only) |
 | `r` | Force refresh |
 | `?` | Help overlay |
 | `q` / `Ctrl+C` | Quit |
@@ -126,25 +129,43 @@ clasp reads state directly from the files Claude Code writes to `~/.claude`:
 | Plugins | `~/.claude/plugins/installed_plugins.json` + `settings.json` + each plugin's `.claude-plugin/plugin.json`, `.mcp.json`, `skills/`, `hooks/hooks.json`, `commands/`, `agents/` |
 | MCP | each plugin's `.mcp.json` + `mcpServers` in `~/.claude/settings.json`, `~/.claude/settings.local.json`, `~/.claude.json` + `claudeAiMcpEverConnected` in `~/.claude.json` + `~/.claude/mcp-needs-auth-cache.json` |
 | Memory | `~/.claude/projects/*/memory/*.md` |
+| Settings | `~/.claude/settings.json`, `<project>/.claude/settings.json`, `<project>/.claude/settings.local.json`, managed `managed-settings.json` + `managed-settings.d/*.json`, and the documented Global config keys in `~/.claude.json`. Server-managed settings, MDM profiles and `--settings` flags are not visible to clasp and are labelled as such |
 
-A background goroutine uses `fsnotify` to watch these directories and sends a refresh message to the UI on any change.
+A background goroutine uses `fsnotify` to watch these files and directories (including `~/.claude.json`, the managed settings directory and the selected project's `.claude/`) and sends one refresh message per burst of changes.
+
+Setting descriptions come from Anthropic's [settings reference](https://code.claude.com/docs/en/settings-reference), rewritten in ASD-STE100 Simplified Technical English. The catalog is embedded at build time; clasp never goes online. To refresh it after the docs change:
+
+```bash
+cd internal/settings && go generate
+```
+
+The generator reports keys that lack a description in `ste.json`; `go test ./internal/settings` fails until every key has one.
 
 ## Project structure
 
 ```
 clasp/
-├── main.go                      # entry point; starts watcher goroutine
+├── main.go                      # entry point; wires UI ↔ watcher project channel
 └── internal/
     ├── state/
-    │   ├── state.go             # reads and parses ~/.claude state files
+    │   ├── state.go             # reads and parses ~/.claude state files; LoadFor(project)
     │   └── write.go             # plugin enable/disable writer (atomic rename)
+    ├── settings/
+    │   ├── catalog.go           # embedded docs catalog + STE descriptions
+    │   ├── catalog.json         # generated from the settings reference
+    │   ├── ste.json             # one ASD-STE100 sentence per key (hand-written)
+    │   ├── layers.go            # reads each settings file into dotted keys
+    │   ├── resolve.go           # precedence merge with per-file provenance
+    │   ├── rules.go             # permission-rule path checks
+    │   └── gen/                 # go generate: settings reference → catalog.json
     ├── ui/
     │   ├── model.go             # Bubble Tea root model, focus dispatch, layout
+    │   ├── tab_settings.go      # Settings tab rows, detail pane, project picker
     │   ├── keys.go              # keyMap (bubbles/key bindings) + contextKeys help wrapper
     │   ├── vim.go               # gg two-press chord state machine
     │   ├── columns.go           # plugin-detail multi-column breakpoints
     │   └── styles.go            # lipgloss palette
-    └── watcher/watcher.go       # fsnotify → RefreshMsg on file changes
+    └── watcher/watcher.go       # fsnotify → debounced RefreshMsg; follows the selected project
 ```
 
 ## Roadmap
@@ -173,6 +194,13 @@ clasp/
 
 **Milestone 5 — first destructive action** ✓
 - [x] Delete a memory entry with `d` in the Memory tab: `y`-gated confirmation, file → macOS Trash, `MEMORY.md` index line pruned in the same step; the index file itself is never deletable
+
+**Milestone 6 — config legibility** (in progress)
+- [x] Settings tab — effective value, source file, layers, STE descriptions, dead permission paths
+- [ ] Claude Code and Claude Desktop side by side
+- [ ] Stale caches and incomplete uninstalls
+- [ ] Cruft: worktrees, transcripts, dead projects, memories
+- [ ] Model and effort audit
 
 **Later** — polish opportunities tracked in [open issues](https://github.com/Tyler-Reagan/clasp/issues):
 - Wordmark offset-shadow effect, scroll-percentage indicator, clipboard yank, small-terminal degradation, parse-warning surfacing, `CLAUDE.md` for the repo, terminal screenshot, glamour render caching
