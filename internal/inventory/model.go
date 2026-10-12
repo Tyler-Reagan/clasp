@@ -60,6 +60,8 @@ type Install struct {
 	Enabled  bool
 	Hash     string // hex sha256; "" when not hashable (e.g. connectors)
 	Desc     string // skill frontmatter description or plugin.json description, if any
+	Type     string // MCP only: transport type
+	Target   string // MCP only: url, or command when there is no url
 }
 
 // Item is everything found under one bare name: a skill dir name, a plugin

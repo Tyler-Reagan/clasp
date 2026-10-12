@@ -136,7 +136,7 @@ func (s desktopSource) loadConfig(c *collector) {
 	c.err(err)
 	for _, name := range sortedKeys(cfg.MCPServers) {
 		c.add(KindMCP, name, Install{
-			Side: SideDSK, Origin: OriginDesktopConfig, Path: path, Enabled: true, Hash: mcpHash(cfg.MCPServers[name]),
+			Side: SideDSK, Origin: OriginDesktopConfig, Path: path, Enabled: true, Hash: mcpHash(cfg.MCPServers[name]), Type: cfg.MCPServers[name].Type, Target: mcpTarget(cfg.MCPServers[name]),
 		})
 	}
 }

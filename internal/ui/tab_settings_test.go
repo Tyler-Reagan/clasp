@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/tylerreagan/clasp/internal/inventory"
 	"github.com/tylerreagan/clasp/internal/settings"
 	"github.com/tylerreagan/clasp/internal/state"
 )
@@ -232,7 +233,7 @@ func TestToggleSettingsAll_KeepsSelectedKey(t *testing.T) {
 
 func TestClampCursors_AfterShrink(t *testing.T) {
 	m := settingsModel(settingsFixture())
-	m.st.Skills = []state.Skill{{Name: "only"}}
+	m.st.Inventory = &inventory.Inventory{Skills: []inventory.Item{{Kind: inventory.KindSkill, Name: "only"}}}
 	m.cursors[tabSkills] = 7
 	m.cursors[tabSettings] = 40
 	m.cursors[tabMCP] = 3 // empty list stays at 0
@@ -261,7 +262,7 @@ func TestVisualIndex_HeaderFreeTab(t *testing.T) {
 func TestRenderList_CursorOnHeaderFreeTab(t *testing.T) {
 	m := settingsModel(settingsFixture())
 	m.tab = tabSkills
-	m.st.Skills = []state.Skill{{Name: "alpha"}, {Name: "bravo"}, {Name: "charlie"}}
+	m.st.Inventory = &inventory.Inventory{Skills: []inventory.Item{{Name: "alpha"}, {Name: "bravo"}, {Name: "charlie"}}}
 	m.cursors[tabSkills] = 2
 	var marked string
 	for _, line := range strings.Split(m.renderList(), "\n") {

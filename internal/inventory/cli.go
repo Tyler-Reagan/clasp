@@ -164,7 +164,7 @@ func loadStandaloneMCP(c *collector, files []mcpSource) {
 			}
 			seen[name] = true
 			c.add(KindMCP, name, Install{
-				Side: SideCLI, Origin: OriginSettings, Path: f.path, Enabled: true, Hash: mcpHash(f.servers[name]),
+				Side: SideCLI, Origin: OriginSettings, Path: f.path, Enabled: true, Hash: mcpHash(f.servers[name]), Type: f.servers[name].Type, Target: mcpTarget(f.servers[name]),
 			})
 		}
 	}

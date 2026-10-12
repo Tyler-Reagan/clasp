@@ -59,14 +59,19 @@ type mcpConfig struct {
 // mcpHash hashes what makes two servers the same: type plus url, or plus
 // command for servers that have no url.
 func mcpHash(cfg mcpConfig) string {
-	target := cfg.URL
-	if target == "" {
-		target = cfg.Command
-	}
+	target := mcpTarget(cfg)
 	if target == "" {
 		return ""
 	}
 	return sha([]byte(cfg.Type + "\n" + target))
+}
+
+// mcpTarget is the server's url, or its command when it has no url.
+func mcpTarget(cfg mcpConfig) string {
+	if cfg.URL != "" {
+		return cfg.URL
+	}
+	return cfg.Command
 }
 
 // pluginMeta is what the inventory reads from .claude-plugin/plugin.json.
@@ -172,7 +177,7 @@ func (c *collector) addPluginMCP(p pluginDir) {
 		cfg := servers[name]
 		c.add(KindMCP, name, Install{
 			Side: p.side, Origin: p.origin, Plugin: p.name, PluginID: p.id, Account: p.account,
-			Path: path, Version: p.version, Enabled: p.enabled, Hash: mcpHash(cfg),
+			Path: path, Version: p.version, Enabled: p.enabled, Hash: mcpHash(cfg), Type: cfg.Type, Target: mcpTarget(cfg),
 		})
 	}
 }

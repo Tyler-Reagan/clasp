@@ -33,6 +33,7 @@ type keyMap struct {
 	Toggle  key.Binding
 	ShowAll key.Binding // Settings: list every key, not just set ones
 	Project key.Binding // Settings: open the project picker
+	Source  key.Binding // Skills/Plugins/MCP: cycle the CLI/Desktop source filter
 	Delete  key.Binding
 	Refresh key.Binding
 	Help    key.Binding
@@ -60,6 +61,7 @@ func defaultKeys() keyMap {
 		Delete:         key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
 		ShowAll:        key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "all keys")),
 		Project:        key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "project")),
+		Source:         key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "source")),
 		Refresh:        key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 		Help:           key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:           key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
@@ -89,7 +91,7 @@ func (c contextKeys) ShortHelp() []key.Binding {
 	}
 	// Delete is enabled only on the Memory tab and ShowAll/Project only on
 	// Settings, so help.Model surfaces each only where it applies.
-	return []key.Binding{k.Up, k.Down, k.Top, k.End, k.NextTab, k.Zoom, k.Delete, k.ShowAll, k.Project, k.Refresh, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Top, k.End, k.NextTab, k.Zoom, k.Delete, k.ShowAll, k.Project, k.Source, k.Refresh, k.Help, k.Quit}
 }
 
 // FullHelp is the ? overlay layout — column groups.
@@ -110,6 +112,6 @@ func (c contextKeys) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.Top, k.End},
 		{k.NextTab, k.PrevTab, k.Zoom},
 		{k.ScrollDown, k.ScrollUp, k.ScrollPageDown, k.ScrollPageUp},
-		{k.Toggle, k.Delete, k.ShowAll, k.Project, k.Refresh, k.Help, k.Quit},
+		{k.Toggle, k.Delete, k.ShowAll, k.Project, k.Source, k.Refresh, k.Help, k.Quit},
 	}
 }
