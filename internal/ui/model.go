@@ -24,10 +24,11 @@ const (
 	tabPlugins
 	tabMCP
 	tabMemory
+	tabSettings
 	tabCount
 )
 
-var tabNames = [tabCount]string{"Sessions", "Skills", "Plugins", "MCP", "Memory"}
+var tabNames = [tabCount]string{"Sessions", "Skills", "Plugins", "MCP", "Memory", "Settings"}
 
 // focus is the active interaction surface. The Update dispatcher routes keys
 // based on focus after handling any modal overlays (e.g. ? help — wired in
@@ -75,10 +76,20 @@ type Model struct {
 	showHelp  bool // ? overlay active; takes modal priority over focus dispatch
 	ready     bool
 	statusMsg string // transient feedback shown in the status bar
+
+	// Settings tab.
+	project         string         // "" = follow the latest session
+	settingsAll     bool           // a: list every catalog key, not just set ones
+	picker          *projectPicker // p: project picker modal; nil when closed
+	projects        chan<- string  // resolved project → watcher; nil in tests
+	lastSentProject string
 }
 
-func New() (*Model, error) {
-	st, err := state.Load()
+// New loads state and builds the model. projects, if non-nil, receives the
+// resolved settings project dir whenever it changes so the watcher can follow
+// it; nil is fine (tests).
+func New(projects chan<- string) (*Model, error) {
+	st, err := state.LoadFor("")
 	h := help.New()
 	// Pull help.Model away from its default adaptive-gray styles into the
 	// warm palette: copper for key labels, muted parchment for descriptions
@@ -96,9 +107,12 @@ func New() (*Model, error) {
 		focus:   focusList,
 		help:    h,
 		keys:    defaultKeys(),
+
+		projects: projects,
 	}
 	// Zoom/UnZoom/Toggle enabled state depends on current focus and tab.
 	m.refreshBindings()
+	m.publishProject()
 	return m, nil
 }
 
@@ -120,8 +134,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case RefreshMsg:
-		st, err := state.Load()
+		st, err := state.LoadFor(m.project)
 		m.st, m.loadErr = st, err
+		m.clampCursors()
+		m.publishProject()
 		m.detail.SetContent(m.detailContent())
 		return m, nil
 
@@ -142,6 +158,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// ctrl+c still quits (universal kill); esc/?/q dismiss the overlay.
 		if m.showHelp {
 			return m.updateHelp(msg)
+		}
+		if m.picker != nil {
+			return m.updatePicker(msg)
 		}
 
 		// Global keys: handled regardless of focus.
@@ -235,6 +254,14 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case key.Matches(msg, m.keys.ShowAll):
+		m.toggleSettingsAll()
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
+		return m, nil
+	case key.Matches(msg, m.keys.Project):
+		m.picker = newProjectPicker(m)
+		return m, nil
 	case key.Matches(msg, m.keys.ScrollDown):
 		m.detail.HalfPageDown()
 		return m, nil
@@ -322,6 +349,9 @@ func (m *Model) refreshBindings() {
 	m.keys.Zoom.SetEnabled(m.focus == focusList)
 	m.keys.UnZoom.SetEnabled(m.focus == focusZoomedDetail)
 	m.keys.Toggle.SetEnabled(m.focus == focusList && m.tab == tabPlugins)
+	settings := m.focus == focusList && m.tab == tabSettings
+	m.keys.ShowAll.SetEnabled(settings)
+	m.keys.Project.SetEnabled(settings)
 }
 
 // resizeDetail re-applies viewport dimensions after a focus change.
@@ -338,6 +368,9 @@ func (m Model) View() string {
 	}
 	if m.showHelp {
 		return m.renderHelp()
+	}
+	if m.picker != nil {
+		return m.renderPicker()
 	}
 	sep := styleMuted.Render(strings.Repeat("─", m.width))
 
@@ -458,20 +491,7 @@ func (m Model) renderList() string {
 	labelW := listInner - prefixW
 
 	// For tabs with headers, map cursor (Nth selectable) to a visual row index.
-	cursorVisIdx := cursor // default: cursor == visual index (no headers)
-	if m.tab == tabMemory {
-		sel := 0
-		for i, r := range rows {
-			if r.isHeader {
-				continue
-			}
-			if sel == cursor {
-				cursorVisIdx = i
-				break
-			}
-			sel++
-		}
-	}
+	cursorVisIdx := visualIndex(rows, cursor)
 
 	start := max(0, cursorVisIdx-bodyH+1)
 	end := min(start+bodyH, len(rows))
@@ -521,7 +541,11 @@ func (m Model) renderStatus() string {
 		right = styleRed.Render("⚠ " + m.loadErr.Error())
 	}
 
-	hint := m.help.View(contextKeys{keys: m.keys, focus: m.focus})
+	// help.Model truncates with "…" at Width; reserve the bar's padding and
+	// the right-hand message so a long hint never wraps onto a second line.
+	h := m.help
+	h.Width = max(0, m.width-2-lipgloss.Width(right))
+	hint := h.View(contextKeys{keys: m.keys, focus: m.focus})
 	pad := max(0, m.width-2-lipgloss.Width(hint)-lipgloss.Width(right))
 	bar := hint + strings.Repeat(" ", pad) + right
 
@@ -534,11 +558,13 @@ func (m Model) renderStatus() string {
 
 // ── list rows ─────────────────────────────────────────────────────────────────
 
-func (m Model) listRows() []rowItem {
+func (m Model) listRows() []rowItem { return m.rowsFor(m.tab) }
+
+func (m Model) rowsFor(t tab) []rowItem {
 	if m.st == nil {
 		return nil
 	}
-	switch m.tab {
+	switch t {
 	case tabSessions:
 		rows := make([]rowItem, len(m.st.Sessions))
 		for i, s := range m.st.Sessions {
@@ -596,23 +622,65 @@ func (m Model) listRows() []rowItem {
 			})
 		}
 		return rows
+	case tabSettings:
+		return m.settingsRows()
 	}
 	return nil
 }
 
-func (m Model) listLen() int {
-	rows := m.listRows()
-	if m.tab != tabMemory {
-		return len(rows)
-	}
-	// For memory, cursor only lands on selectable (non-header) rows.
+func (m Model) listLen() int { return m.lenFor(m.tab) }
+
+// lenFor counts selectable rows: the cursor only lands on non-header rows.
+func (m Model) lenFor(t tab) int {
 	n := 0
-	for _, r := range rows {
+	for _, r := range m.rowsFor(t) {
 		if !r.isHeader {
 			n++
 		}
 	}
 	return n
+}
+
+// clampCursors pulls every tab's cursor back inside its list after a reload
+// shrinks it.
+func (m *Model) clampCursors() {
+	for t := tab(0); t < tabCount; t++ {
+		m.cursors[t] = clamp(m.cursors[t], 0, m.lenFor(t)-1)
+	}
+}
+
+// visualIndex maps a cursor (the Nth selectable row) to its index in rows.
+// A cursor past the end maps to itself.
+func visualIndex(rows []rowItem, cursor int) int {
+	sel := 0
+	for i, r := range rows {
+		if r.isHeader {
+			continue
+		}
+		if sel == cursor {
+			return i
+		}
+		sel++
+	}
+	return cursor
+}
+
+// publishProject tells the watcher which project the Settings tab resolved,
+// once per change. The send never blocks; when the channel is full the value
+// stays unsent and the next load retries.
+func (m *Model) publishProject() {
+	if m.projects == nil || m.st == nil || m.st.Settings == nil {
+		return
+	}
+	p := m.st.Settings.Project
+	if p == m.lastSentProject {
+		return
+	}
+	select {
+	case m.projects <- p:
+		m.lastSentProject = p
+	default:
+	}
 }
 
 // ── detail content ────────────────────────────────────────────────────────────
@@ -623,6 +691,8 @@ func (m Model) detailContent() string {
 	}
 	c := m.cursors[m.tab]
 	switch m.tab {
+	case tabSettings:
+		return m.settingsDetail(c)
 	case tabSessions:
 		if c >= len(m.st.Sessions) {
 			return emptyState("no active sessions")

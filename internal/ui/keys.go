@@ -31,6 +31,8 @@ type keyMap struct {
 
 	// Actions.
 	Toggle  key.Binding
+	ShowAll key.Binding // Settings: list every key, not just set ones
+	Project key.Binding // Settings: open the project picker
 	Refresh key.Binding
 	Help    key.Binding
 	Quit    key.Binding
@@ -54,6 +56,8 @@ func defaultKeys() keyMap {
 		Zoom:           key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "zoom")),
 		UnZoom:         key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		Toggle:         key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "toggle")),
+		ShowAll:        key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "all keys")),
+		Project:        key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "project")),
 		Refresh:        key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 		Help:           key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:           key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
@@ -81,7 +85,7 @@ func (c contextKeys) ShortHelp() []key.Binding {
 		down.SetHelp("↓/j", "scroll down")
 		return []key.Binding{up, down, k.Top, k.End, k.NextTab, k.UnZoom, k.Help, k.Quit}
 	}
-	return []key.Binding{k.Up, k.Down, k.Top, k.End, k.NextTab, k.Zoom, k.Refresh, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Top, k.End, k.NextTab, k.Zoom, k.ShowAll, k.Project, k.Refresh, k.Help, k.Quit}
 }
 
 // FullHelp is the ? overlay layout — column groups.
@@ -102,6 +106,6 @@ func (c contextKeys) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.Top, k.End},
 		{k.NextTab, k.PrevTab, k.Zoom},
 		{k.ScrollDown, k.ScrollUp, k.ScrollPageDown, k.ScrollPageUp},
-		{k.Toggle, k.Refresh, k.Help, k.Quit},
+		{k.Toggle, k.ShowAll, k.Project, k.Refresh, k.Help, k.Quit},
 	}
 }

@@ -36,14 +36,17 @@ func main() {
 		}
 	}
 
-	m, err := ui.New()
+	// carries the selected project from the UI to the watcher, which then
+	// watches that project's .claude directory
+	projects := make(chan string, 1)
+	m, err := ui.New(projects)
 	if err != nil {
 		// non-fatal: model loads with partial state and shows a warning
 		fmt.Fprintf(os.Stderr, "clasp: warning: %v\n", err)
 	}
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
-	go watcher.Watch(p)
+	watcher.Start(p, projects)
 
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "clasp: %v\n", err)

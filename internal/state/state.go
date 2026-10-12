@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/tylerreagan/clasp/internal/settings"
 )
 
 type Session struct {
@@ -44,9 +46,9 @@ type MCPServer struct {
 }
 
 type Plugin struct {
-	ID          string
-	Installs    []PluginInstall
-	Enabled     bool
+	ID       string
+	Installs []PluginInstall
+	Enabled  bool
 	// from .claude-plugin/plugin.json
 	DisplayName string
 	Description string
@@ -96,6 +98,7 @@ type State struct {
 	Plugins    []Plugin
 	MCPServers []MCPServer
 	Memory     []MemoryEntry
+	Settings   *settings.Snapshot
 }
 
 func ClaudeDir() string {
@@ -103,7 +106,12 @@ func ClaudeDir() string {
 	return filepath.Join(home, ".claude")
 }
 
-func Load() (*State, error) {
+// Load loads state with the project auto-selected from the latest session.
+func Load() (*State, error) { return LoadFor("") }
+
+// LoadFor loads state and resolves settings for project. An empty project
+// means auto: the cwd of the most recently started live session, or none.
+func LoadFor(project string) (*State, error) {
 	dir := ClaudeDir()
 	s := &State{}
 	var firstErr error
@@ -115,7 +123,31 @@ func Load() (*State, error) {
 			firstErr = err
 		}
 	}
+
+	proj := project
+	if proj == "" {
+		proj = latestSessionCWD(s.Sessions)
+	}
+	// Resolve records per-layer errors itself, so it never feeds firstErr.
+	s.Settings = settings.Resolve(settings.DefaultEnv(), proj)
+	s.Settings.ProjectAuto = project == ""
 	return s, firstErr
+}
+
+// latestSessionCWD returns the cwd of the newest session whose cwd still
+// exists as a directory, or "" if there is none.
+func latestSessionCWD(sessions []Session) string {
+	var best string
+	var bestAt int64
+	for _, sess := range sessions {
+		if sess.CWD == "" || (best != "" && sess.StartedAt <= bestAt) {
+			continue
+		}
+		if fi, err := os.Stat(sess.CWD); err == nil && fi.IsDir() {
+			best, bestAt = sess.CWD, sess.StartedAt
+		}
+	}
+	return best
 }
 
 func loadSessions(dir string, s *State) error {

@@ -1,6 +1,8 @@
 package state
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -212,5 +214,58 @@ func TestParseSkillMD_LargeFrontmatterDoesNotHang(t *testing.T) {
 	name, _, _ := parseSkillMD(b.String())
 	if name != "x" {
 		t.Errorf("name = %q", name)
+	}
+}
+
+func TestLatestSessionCWD(t *testing.T) {
+	older, newer, gone := t.TempDir(), t.TempDir(), filepath.Join(t.TempDir(), "deleted")
+
+	tests := []struct {
+		name     string
+		sessions []Session
+		want     string
+	}{
+		{"empty", nil, ""},
+		{"picks newest", []Session{{CWD: older, StartedAt: 1}, {CWD: newer, StartedAt: 2}}, newer},
+		{"order independent", []Session{{CWD: newer, StartedAt: 2}, {CWD: older, StartedAt: 1}}, newer},
+		{"skips deleted dir", []Session{{CWD: older, StartedAt: 1}, {CWD: gone, StartedAt: 9}}, older},
+		{"only deleted", []Session{{CWD: gone, StartedAt: 9}}, ""},
+		{"skips empty cwd", []Session{{CWD: "", StartedAt: 9}, {CWD: older, StartedAt: 1}}, older},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := latestSessionCWD(tt.sessions); got != tt.want {
+				t.Errorf("latestSessionCWD() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLatestSessionCWD_SkipsFile(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(f, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := latestSessionCWD([]Session{{CWD: f, StartedAt: 1}}); got != "" {
+		t.Errorf("latestSessionCWD() = %q, want empty for non-directory", got)
+	}
+}
+
+func TestLoadFor_SetsSettings(t *testing.T) {
+	proj := t.TempDir()
+	s, _ := LoadFor(proj) // loader errors are expected on a machine without ~/.claude
+	if s == nil || s.Settings == nil {
+		t.Fatal("LoadFor() left Settings nil")
+	}
+	if s.Settings.ProjectAuto {
+		t.Error("ProjectAuto = true for an explicit project")
+	}
+	if s.Settings.Project != proj {
+		t.Errorf("Settings.Project = %q, want %q", s.Settings.Project, proj)
+	}
+
+	auto, _ := LoadFor("")
+	if auto == nil || auto.Settings == nil || !auto.Settings.ProjectAuto {
+		t.Error("LoadFor(\"\") should set Settings with ProjectAuto = true")
 	}
 }
