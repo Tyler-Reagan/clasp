@@ -47,7 +47,21 @@ type toggleResultMsg struct {
 	err error
 }
 
+type deleteResultMsg struct {
+	name string
+	err  error
+}
+
 type clearStatusMsg struct{}
+
+// deleteTarget identifies a memory entry awaiting delete confirmation. The
+// name is carried for the prompt and the success message; project+file locate
+// the .md file on disk.
+type deleteTarget struct {
+	project string
+	file    string
+	name    string
+}
 
 // rowItem separates the styled indicator from the plain label so truncation
 // operates only on plain bytes (no ANSI escape codes).
@@ -83,6 +97,12 @@ type Model struct {
 	picker          *projectPicker // p: project picker modal; nil when closed
 	projects        chan<- string  // resolved project → watcher; nil in tests
 	lastSentProject string
+
+	// pendingDelete is non-nil while a memory delete awaits y/n confirmation.
+	// Like showHelp it takes modal priority: the next key either confirms (y)
+	// or cancels (anything else). Delete is irreversible, so it never fires on
+	// a single keypress the way the plugin toggle does.
+	pendingDelete *deleteTarget
 }
 
 // New loads state and builds the model. projects, if non-nil, receives the
@@ -136,6 +156,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case RefreshMsg:
 		st, err := state.LoadFor(m.project)
 		m.st, m.loadErr = st, err
+		// A delete (or any external change) can shrink a list out from under
+		// its cursor; clamp every tab so each stays on a valid row.
 		m.clampCursors()
 		m.publishProject()
 		m.detail.SetContent(m.detailContent())
@@ -149,6 +171,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, clearStatusAfter(3 * time.Second)
 
+	case deleteResultMsg:
+		if msg.err != nil {
+			m.statusMsg = styleRed.Render("✗ " + msg.err.Error())
+			return m, clearStatusAfter(3 * time.Second)
+		}
+		m.statusMsg = styleGreen.Render("🗑 trashed " + msg.name)
+		// Reload immediately so the row disappears without waiting on the watcher,
+		// then clear the toast after a beat.
+		return m, tea.Batch(
+			func() tea.Msg { return RefreshMsg{} },
+			clearStatusAfter(3*time.Second),
+		)
+
 	case clearStatusMsg:
 		m.statusMsg = ""
 		return m, nil
@@ -161,6 +196,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.picker != nil {
 			return m.updatePicker(msg)
+		}
+
+		// A pending delete confirmation is also modal: the next key is the
+		// y/n answer, captured before any normal dispatch.
+		if m.pendingDelete != nil {
+			return m.updateConfirmDelete(msg)
 		}
 
 		// Global keys: handled regardless of focus.
@@ -196,6 +237,24 @@ func (m Model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+// updateConfirmDelete handles the y/n answer to a pending memory delete.
+// Only an explicit y/Y proceeds; every other key (esc, n, or a stray press)
+// cancels — the safe default for a destructive, irreversible action.
+func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "y", "Y":
+		t := *m.pendingDelete
+		m.pendingDelete = nil
+		return m, memoryDeleteCmd(t)
+	default:
+		m.pendingDelete = nil
+		m.statusMsg = styleMuted.Render("· delete cancelled")
+		return m, clearStatusAfter(2 * time.Second)
+	}
 }
 
 func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -261,6 +320,26 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case key.Matches(msg, m.keys.Project):
 		m.picker = newProjectPicker(m)
+		return m, nil
+	case key.Matches(msg, m.keys.Delete):
+		if m.tab != tabMemory || m.st == nil {
+			return m, nil
+		}
+		idx := m.selectedMemoryIdx()
+		if idx < 0 || idx >= len(m.st.Memory) {
+			return m, nil
+		}
+		e := m.st.Memory[idx]
+		// MEMORY.md surfaces as a row but is the index, not a memory — refuse it.
+		if e.File == "MEMORY.md" {
+			m.statusMsg = styleRed.Render("✗ MEMORY.md is the index — not deletable")
+			return m, clearStatusAfter(3 * time.Second)
+		}
+		name := e.Name
+		if name == "" {
+			name = strings.TrimSuffix(e.File, ".md")
+		}
+		m.pendingDelete = &deleteTarget{project: e.Project, file: e.File, name: name}
 		return m, nil
 	case key.Matches(msg, m.keys.ScrollDown):
 		m.detail.HalfPageDown()
@@ -352,6 +431,7 @@ func (m *Model) refreshBindings() {
 	settings := m.focus == focusList && m.tab == tabSettings
 	m.keys.ShowAll.SetEnabled(settings)
 	m.keys.Project.SetEnabled(settings)
+	m.keys.Delete.SetEnabled(m.focus == focusList && m.tab == tabMemory)
 }
 
 // resizeDetail re-applies viewport dimensions after a focus change.
@@ -535,7 +615,12 @@ func (m Model) renderDetail() string {
 
 func (m Model) renderStatus() string {
 	var right string
-	if m.statusMsg != "" {
+	if m.pendingDelete != nil {
+		// Persistent (no clear-tick) until the y/n answer arrives. y is copper
+		// to read as the active choice; N is capitalized to signal the default.
+		right = styleYellow.Render("trash '"+m.pendingDelete.name+"'? ") +
+			stylePrimary.Render("y") + styleMuted.Render("/N")
+	} else if m.statusMsg != "" {
 		right = m.statusMsg
 	} else if m.loadErr != nil {
 		right = styleRed.Render("⚠ " + m.loadErr.Error())
@@ -683,6 +768,27 @@ func (m *Model) publishProject() {
 	}
 }
 
+// selectedMemoryIdx maps the Memory-tab cursor (the Nth selectable row) to an
+// index into m.st.Memory, skipping the project group headers. Returns -1 when
+// the current tab isn't Memory or nothing resolves.
+func (m Model) selectedMemoryIdx() int {
+	if m.tab != tabMemory {
+		return -1
+	}
+	c := m.cursors[tabMemory]
+	sel := 0
+	for _, row := range m.listRows() {
+		if row.isHeader {
+			continue
+		}
+		if sel == c {
+			return row.dataIdx
+		}
+		sel++
+	}
+	return -1
+}
+
 // ── detail content ────────────────────────────────────────────────────────────
 
 func (m Model) detailContent() string {
@@ -794,19 +900,7 @@ func (m Model) detailContent() string {
 		return strings.Join(lines, "\n")
 
 	case tabMemory:
-		// Map cursor (Nth selectable row) to the memory entry via dataIdx.
-		memIdx := -1
-		sel := 0
-		for _, row := range m.listRows() {
-			if row.isHeader {
-				continue
-			}
-			if sel == c {
-				memIdx = row.dataIdx
-				break
-			}
-			sel++
-		}
+		memIdx := m.selectedMemoryIdx()
 		if memIdx < 0 || memIdx >= len(m.st.Memory) {
 			return emptyState("no memory entries")
 		}
@@ -1075,6 +1169,13 @@ func pluginToggleCmd(id string) tea.Cmd {
 	return func() tea.Msg {
 		err := state.TogglePlugin(id)
 		return toggleResultMsg{id: id, err: err}
+	}
+}
+
+func memoryDeleteCmd(t deleteTarget) tea.Cmd {
+	return func() tea.Msg {
+		err := state.DeleteMemory(t.project, t.file)
+		return deleteResultMsg{name: t.name, err: err}
 	}
 }
 

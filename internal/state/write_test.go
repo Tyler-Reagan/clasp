@@ -2,7 +2,10 @@ package state
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -131,4 +134,129 @@ func TestToggleEnabledPlugin_InvalidJSON(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error on invalid JSON, got nil")
 	}
+}
+
+func TestRemoveIndexLine(t *testing.T) {
+	tests := []struct {
+		name        string
+		content     string
+		file        string
+		want        string
+		wantChanged bool
+	}{
+		{
+			"removes the matching pointer line",
+			"# Memory index\n\n- [A](a.md) — x\n- [B](b.md) — y\n",
+			"a.md",
+			"# Memory index\n\n- [B](b.md) — y\n",
+			true,
+		},
+		{
+			"no match leaves content and reports unchanged",
+			"# Memory index\n\n- [A](a.md) — x\n",
+			"z.md",
+			"# Memory index\n\n- [A](a.md) — x\n",
+			false,
+		},
+		{
+			"filename substring does not over-match a longer name",
+			"# Memory index\n\n- [A](a.md) — x\n- [AA](aa.md) — y\n",
+			"a.md",
+			"# Memory index\n\n- [AA](aa.md) — y\n",
+			true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, changed := removeIndexLine(tt.content, tt.file)
+			if got != tt.want {
+				t.Errorf("content = %q, want %q", got, tt.want)
+			}
+			if changed != tt.wantChanged {
+				t.Errorf("changed = %v, want %v", changed, tt.wantChanged)
+			}
+		})
+	}
+}
+
+func TestUniqueTrashName(t *testing.T) {
+	dir := t.TempDir()
+
+	if got, want := uniqueTrashName(dir, "a.md"), filepath.Join(dir, "a.md"); got != want {
+		t.Fatalf("no collision: got %q, want %q", got, want)
+	}
+
+	mustTouch(t, filepath.Join(dir, "a.md"))
+	if got, want := uniqueTrashName(dir, "a.md"), filepath.Join(dir, "a 2.md"); got != want {
+		t.Fatalf("first collision: got %q, want %q", got, want)
+	}
+
+	mustTouch(t, filepath.Join(dir, "a 2.md"))
+	if got, want := uniqueTrashName(dir, "a.md"), filepath.Join(dir, "a 3.md"); got != want {
+		t.Fatalf("second collision: got %q, want %q", got, want)
+	}
+}
+
+func TestDeleteMemory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".Trash"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	proj := "-Users-test-proj"
+	memDir := filepath.Join(home, ".claude", "projects", proj, "memory")
+	if err := os.MkdirAll(memDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const file = "foo-bar.md"
+	mustWrite(t, filepath.Join(memDir, file), "---\nname: foo-bar\n---\nbody")
+	mustWrite(t, filepath.Join(memDir, "MEMORY.md"),
+		"# Memory index\n\n- [Foo](foo-bar.md) — hook\n- [Other](other.md) — keep\n")
+
+	if err := DeleteMemory(proj, file); err != nil {
+		t.Fatalf("DeleteMemory: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(memDir, file)); !os.IsNotExist(err) {
+		t.Errorf("memory file still in place (err=%v); should be trashed", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".Trash", file)); err != nil {
+		t.Errorf("file not found in Trash: %v", err)
+	}
+
+	idx := mustRead(t, filepath.Join(memDir, "MEMORY.md"))
+	if strings.Contains(idx, "foo-bar.md") {
+		t.Errorf("index still references the deleted file:\n%s", idx)
+	}
+	if !strings.Contains(idx, "other.md") {
+		t.Errorf("index lost an unrelated entry:\n%s", idx)
+	}
+}
+
+func TestDeleteMemory_RefusesIndexFile(t *testing.T) {
+	// Refusal happens before any disk access, so no HOME setup is needed.
+	if err := DeleteMemory("any-project", "MEMORY.md"); err == nil {
+		t.Fatal("expected error deleting MEMORY.md, got nil")
+	}
+}
+
+func mustTouch(t *testing.T, path string) {
+	t.Helper()
+	mustWrite(t, path, "")
+}
+
+func mustWrite(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustRead(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
