@@ -34,6 +34,7 @@ Claude Code's slash commands are powerful but disruptive mid-conversation. clasp
 - **MCP** — all MCP servers: plugin-bundled servers, standalone entries from `settings.json` / `settings.local.json`, account-level integrations from `~/.claude.json` (`claudeAiMcpEverConnected`), and servers awaiting OAuth from `mcp-needs-auth-cache.json`
 - **Memory** — all memory entries across projects, grouped by project, with type, description, and full body
 - **Settings** — every Claude Code setting you have set, with a one-sentence description, its effective value, the file that supplied it, and every other file that also sets it (managed, project local, project, user, and the documented keys in `~/.claude.json`). List keys such as `permissions.allow` show each entry with its source, and `Read`/`Edit` rules that point at paths that no longer exist are flagged. Press `a` to browse all documented keys with their defaults, and `p` to pick which project's settings apply (default: the most recent active session)
+- **Claude Code and Claude Desktop side by side** — the Skills, Plugins and MCP tabs show a **CLI** and a **DSK** column: `●` enabled, `○` disabled, `·` absent, `◇` claude.ai account connector. Rows flag `≠` when installs with the same name differ in content (SHA-256, so a copy with the same version string but newer files is still caught) and `×2` when one plugin is installed twice on the same side (for example a marketplace install plus its claude.ai-synced copy). Press `s` to filter: all, Claude Code only, Desktop only, mismatched. The detail pane lists every install with its origin, account, path, version and hash. Columns show files on disk; which copy a Desktop session loads is not documented, and clasp says so
 - **Zoom mode** — press `Enter` on any list row to expand the detail pane full-width for in-depth reading; `Esc` returns. Plugin detail re-flows into 2 or 3 columns at wide terminals so heavy plugins (vercel, etc.) stay readable without scrolling.
 - **Branded visual identity** — pixel-art "clasp" wordmark inspired by the Claude Code brand; custom warm palette (copper accent, parchment text, steel chrome) instead of generic Catppuccin defaults
 - **Context-sensitive help** — `?` opens an overlay listing the keybindings that fire in the current mode (browse vs zoom)
@@ -98,6 +99,7 @@ clasp
 | `Enter` | Zoom into the highlighted item (full-width detail) |
 | `space` | Toggle plugin on/off (Plugins tab only) |
 | `d` | Delete memory entry → macOS Trash (Memory tab only; confirm with `y`) |
+| `s` | Cycle source filter: all / Claude Code only / Desktop only / mismatched (Skills, Plugins, MCP; needs Claude Desktop) |
 | `a` | Show all documented keys / only set keys (Settings tab only) |
 | `p` | Pick the project whose settings apply (Settings tab only) |
 | `r` | Force refresh |
@@ -125,13 +127,15 @@ clasp reads state directly from the files Claude Code writes to `~/.claude`:
 | Tab | Source |
 |---|---|
 | Sessions | `~/.claude/sessions/<pid>.json` |
-| Skills | `~/.claude/skills/*/SKILL.md` (follows symlinks) |
-| Plugins | `~/.claude/plugins/installed_plugins.json` + `settings.json` + each plugin's `.claude-plugin/plugin.json`, `.mcp.json`, `skills/`, `hooks/hooks.json`, `commands/`, `agents/` |
+| Skills | `~/.claude/skills/*/SKILL.md` (follows symlinks) + each plugin's `skills/**/SKILL.md` (marketplace and claude.ai-synced) |
+| Plugins | `~/.claude/plugins/installed_plugins.json` + `~/.claude/plugins/synced/` + `settings.json` + each plugin's `.claude-plugin/plugin.json`, `.mcp.json`, `skills/`, `hooks/hooks.json`, `commands/`, `agents/` |
 | MCP | each plugin's `.mcp.json` + `mcpServers` in `~/.claude/settings.json`, `~/.claude/settings.local.json`, `~/.claude.json` + `claudeAiMcpEverConnected` in `~/.claude.json` + `~/.claude/mcp-needs-auth-cache.json` |
 | Memory | `~/.claude/projects/*/memory/*.md` |
 | Settings | `~/.claude/settings.json`, `<project>/.claude/settings.json`, `<project>/.claude/settings.local.json`, managed `managed-settings.json` + `managed-settings.d/*.json`, and the documented Global config keys in `~/.claude.json`. Server-managed settings, MDM profiles and `--settings` flags are not visible to clasp and are labelled as such |
 
-A background goroutine uses `fsnotify` to watch these files and directories (including `~/.claude.json`, the managed settings directory and the selected project's `.claude/`) and sends one refresh message per burst of changes.
+The **DSK** column reads Claude Desktop's own store (`~/Library/Application Support/Claude` on macOS, `~/.config/Claude` on Linux): the `anthropic-skills` plugin under `local-agent-mode-sessions/skills-plugin/` (with its `manifest.json` enabled flags), account plugins under `local-agent-mode-sessions/*/*/rpm/` (matched by `.claude-plugin/plugin.json` name), and `mcpServers` in `claude_desktop_config.json`. Every org/account folder is read. clasp never opens Desktop's `config.json` (it holds sign-in tokens) or per-session folders. Desktop's Code tab reads `~/.claude` like the CLI, so its files count under CLI.
+
+A background goroutine uses `fsnotify` to watch these files and directories (including `~/.claude.json`, the managed settings directory, the selected project's `.claude/`, `plugins/synced`, `claude_desktop_config.json` and Desktop's skill and plugin folders) and sends one refresh message per burst of changes.
 
 Setting descriptions come from Anthropic's [settings reference](https://code.claude.com/docs/en/settings-reference), rewritten in ASD-STE100 Simplified Technical English. The catalog is embedded at build time; clasp never goes online. To refresh it after the docs change:
 
@@ -150,6 +154,7 @@ clasp/
     ├── state/
     │   ├── state.go             # reads and parses ~/.claude state files; LoadFor(project)
     │   └── write.go             # plugin enable/disable writer (atomic rename)
+    ├── inventory/               # CLI vs Desktop skills, plugins, MCP: sources, hash cache, compare
     ├── settings/
     │   ├── catalog.go           # embedded docs catalog + STE descriptions
     │   ├── catalog.json         # generated from the settings reference
@@ -160,6 +165,7 @@ clasp/
     │   └── gen/                 # go generate: settings reference → catalog.json
     ├── ui/
     │   ├── model.go             # Bubble Tea root model, focus dispatch, layout
+    │   ├── tab_inventory.go     # Skills/Plugins/MCP rows with CLI/DSK columns, source filter, install detail
     │   ├── tab_settings.go      # Settings tab rows, detail pane, project picker
     │   ├── keys.go              # keyMap (bubbles/key bindings) + contextKeys help wrapper
     │   ├── vim.go               # gg two-press chord state machine
@@ -197,7 +203,7 @@ clasp/
 
 **Milestone 6 — config legibility** (in progress)
 - [x] Settings tab — effective value, source file, layers, STE descriptions, dead permission paths
-- [ ] Claude Code and Claude Desktop side by side
+- [x] Claude Code and Claude Desktop side by side — CLI/DSK columns, source filter, content-hash drift and duplicate installs
 - [ ] Stale caches and incomplete uninstalls
 - [ ] Cruft: worktrees, transcripts, dead projects, memories
 - [ ] Model and effort audit

@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/fsnotify/fsnotify"
+	"github.com/tylerreagan/clasp/internal/inventory"
 	"github.com/tylerreagan/clasp/internal/settings"
 	"github.com/tylerreagan/clasp/internal/state"
 	"github.com/tylerreagan/clasp/internal/ui"
@@ -64,6 +65,33 @@ func Start(p *tea.Program, projects <-chan string) {
 	if env.ManagedDir != "" {
 		l.addStatic(env.ManagedDir)
 		l.addStatic(filepath.Join(env.ManagedDir, "managed-settings.d"))
+	}
+
+	// Inventory sources. Accounts and plugin dirs that appear later need a
+	// restart, like memory dirs. Never watch DesktopDir itself: fsnotify is
+	// not recursive and that dir changes constantly.
+	inv := inventory.DefaultEnv()
+	addDirs := func(pattern string) {
+		matches, _ := filepath.Glob(pattern)
+		for _, m := range matches {
+			if fi, err := os.Stat(m); err == nil && fi.IsDir() {
+				l.addStatic(m)
+			}
+		}
+	}
+	l.addStatic(filepath.Join(dir, "plugins", "synced"))
+	addDirs(filepath.Join(dir, "plugins", "synced", "*_*"))
+	if inv.DesktopDir != "" {
+		desktopCfg := filepath.Join(inv.DesktopDir, "claude_desktop_config.json")
+		l.addStatic(desktopCfg)
+		l.reAdd[desktopCfg] = true
+		skillsPlugin := filepath.Join(inv.DesktopDir, "local-agent-mode-sessions", "skills-plugin", "*", "*")
+		addDirs(skillsPlugin)
+		skillDirs, _ := filepath.Glob(skillsPlugin)
+		for _, d := range skillDirs {
+			l.addStatic(filepath.Join(d, "skills"))
+		}
+		addDirs(filepath.Join(inv.DesktopDir, "local-agent-mode-sessions", "*", "*", "rpm"))
 	}
 
 	go func() {

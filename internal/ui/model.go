@@ -73,6 +73,10 @@ type rowItem struct {
 	label    string
 	isHeader bool
 	dataIdx  int
+	// tail is a pre-styled, right-aligned run (flags and marks) that is
+	// tailW cells wide; the label is truncated and padded to leave room.
+	tail  string
+	tailW int
 }
 
 type Model struct {
@@ -94,6 +98,7 @@ type Model struct {
 	// Settings tab.
 	project         string         // "" = follow the latest session
 	settingsAll     bool           // a: list every catalog key, not just set ones
+	srcFilter       [tabCount]int  // s: per-tab source filter (Skills, Plugins, MCP)
 	picker          *projectPicker // p: project picker modal; nil when closed
 	projects        chan<- string  // resolved project → watcher; nil in tests
 	lastSentProject string
@@ -156,6 +161,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case RefreshMsg:
 		st, err := state.LoadFor(m.project)
 		m.st, m.loadErr = st, err
+		m.refreshBindings()
 		// A delete (or any external change) can shrink a list out from under
 		// its cursor; clamp every tab so each stays on a valid row.
 		m.clampCursors()
@@ -307,11 +313,13 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case key.Matches(msg, m.keys.Toggle):
 		if m.tab == tabPlugins && m.st != nil {
-			c := m.cursors[m.tab]
-			if c < len(m.st.Plugins) {
-				return m, pluginToggleCmd(m.st.Plugins[c].ID)
-			}
+			return m.toggleSelectedPlugin()
 		}
+		return m, nil
+	case key.Matches(msg, m.keys.Source):
+		m.cycleSource()
+		m.detail.GotoTop()
+		m.detail.SetContent(m.detailContent())
 		return m, nil
 	case key.Matches(msg, m.keys.ShowAll):
 		m.toggleSettingsAll()
@@ -432,6 +440,7 @@ func (m *Model) refreshBindings() {
 	m.keys.ShowAll.SetEnabled(settings)
 	m.keys.Project.SetEnabled(settings)
 	m.keys.Delete.SetEnabled(m.focus == focusList && m.tab == tabMemory)
+	m.keys.Source.SetEnabled(m.focus == focusList && invTab(m.tab) && m.hasDesktop())
 }
 
 // resizeDetail re-applies viewport dimensions after a focus change.
@@ -580,16 +589,19 @@ func (m Model) renderList() string {
 	for i := start; i < end; i++ {
 		r := rows[i]
 		var line string
-		if r.isHeader {
+		if r.isHeader && r.tailW > 0 {
+			w := listInner - 1 - r.tailW
+			line = styleMuted.Render(" "+padRight(truncate(r.label, w), w)) + r.tail
+		} else if r.isHeader {
 			// Project group header: muted, no cursor indicator, indented label.
 			label := truncate(r.label, listInner-2)
 			line = styleMuted.Render(" " + label)
 		} else if i == cursorVisIdx {
-			label := truncate(r.label, labelW)
-			line = stylePrimary.Render("▌") + r.ind + " " + styleSelected.Render(label)
+			label := fitLabel(r, labelW)
+			line = stylePrimary.Render("▌") + r.ind + " " + styleSelected.Render(label) + r.tail
 		} else {
-			label := truncate(r.label, labelW)
-			line = " " + r.ind + " " + label
+			label := fitLabel(r, labelW)
+			line = " " + r.ind + " " + label + r.tail
 		}
 		lines = append(lines, styleNormal.Width(listInner).Render(line))
 	}
@@ -624,6 +636,8 @@ func (m Model) renderStatus() string {
 		right = m.statusMsg
 	} else if m.loadErr != nil {
 		right = styleRed.Render("⚠ " + m.loadErr.Error())
+	} else {
+		right = m.invSummary(m.tab)
 	}
 
 	// help.Model truncates with "…" at Width; reserve the bar's padding and
@@ -660,28 +674,8 @@ func (m Model) rowsFor(t tab) []rowItem {
 			rows[i] = rowItem{ind: dot, indW: 1, label: fmt.Sprintf("%d  %s", s.PID, shortPath(s.CWD))}
 		}
 		return rows
-	case tabSkills:
-		rows := make([]rowItem, len(m.st.Skills))
-		for i, s := range m.st.Skills {
-			rows[i] = rowItem{ind: styleMuted.Render("·"), indW: 1, label: s.Name}
-		}
-		return rows
-	case tabPlugins:
-		rows := make([]rowItem, len(m.st.Plugins))
-		for i, p := range m.st.Plugins {
-			dot := styleRed.Render("○")
-			if p.Enabled {
-				dot = styleGreen.Render("●")
-			}
-			rows[i] = rowItem{ind: dot, indW: 1, label: pluginShortName(p.ID)}
-		}
-		return rows
-	case tabMCP:
-		rows := make([]rowItem, len(m.st.MCPServers))
-		for i, srv := range m.st.MCPServers {
-			rows[i] = rowItem{ind: stylePrimary.Render("◈"), indW: 1, label: srv.Name}
-		}
-		return rows
+	case tabSkills, tabPlugins, tabMCP:
+		return m.invRows(t)
 	case tabMemory:
 		var rows []rowItem
 		lastProj := ""
@@ -814,90 +808,8 @@ func (m Model) detailContent() string {
 			kv("Version", s.Version),
 		}, "\n")
 
-	case tabSkills:
-		if c >= len(m.st.Skills) {
-			return emptyState("no skills installed")
-		}
-		sk := m.st.Skills[c]
-		lines := []string{styleDetailTitle.Render(sk.Name), ""}
-		if sk.Description != "" {
-			lines = append(lines, kvWrap("Description", sk.Description, m.detail.Width))
-		}
-		if sk.BodyPreview != "" {
-			lines = append(lines, kvWrap("Preview", sk.BodyPreview, m.detail.Width))
-		}
-		lines = append(lines, "")
-		if sk.SourcePath != "" {
-			lines = append(lines, kv("Path", shortPath(sk.SourcePath)))
-		}
-		if sk.LineCount > 0 {
-			lines = append(lines, kv("Lines", fmt.Sprintf("%d", sk.LineCount)))
-		}
-		if !sk.ModTime.IsZero() {
-			lines = append(lines, kv("Modified", sk.ModTime.Format("2006-01-02 15:04")))
-		}
-		return strings.Join(lines, "\n")
-
-	case tabPlugins:
-		if c >= len(m.st.Plugins) {
-			return emptyState("no plugins installed")
-		}
-		p := m.st.Plugins[c]
-		statusStr := styleRed.Render("disabled")
-		if p.Enabled {
-			statusStr = styleGreen.Render("enabled")
-		}
-		title := pluginShortName(p.ID)
-		if p.DisplayName != "" && p.DisplayName != title {
-			title = p.DisplayName
-		}
-		lines := []string{styleDetailTitle.Render(title), ""}
-		if p.Description != "" {
-			lines = append(lines, kvWrap("Description", p.Description, m.detail.Width))
-		}
-		if p.Author != "" {
-			lines = append(lines, kv("Author", p.Author))
-		}
-		lines = append(lines,
-			kv("ID", p.ID),
-			kv("Version", p.Version()),
-			fmt.Sprintf("%-12s", "Status:")+"  "+statusStr,
-			kv("Scope", p.Scope()),
-			kv("Installed", p.InstalledAt()),
-		)
-		lines = append(lines, "", styleMuted.Render(strings.Repeat("─", m.detail.Width)))
-		sections := []sectionBlock{
-			{"Skills", p.SkillNames},
-			{"MCP Servers", mcpNames(p.MCPServers)},
-			{"Commands", p.Commands},
-			{"Agents", p.Agents},
-			{"Hooks", p.HookEvents},
-		}
-		lines = append(lines, renderPluginSections(sections, m.detail.Width))
-		claudeMD := "(none)"
-		if p.HasClaudeMD {
-			claudeMD = styleGreen.Render("yes")
-		}
-		lines = append(lines, kv("CLAUDE.md", claudeMD))
-		return strings.Join(lines, "\n")
-
-	case tabMCP:
-		if c >= len(m.st.MCPServers) {
-			return emptyState("no MCP servers configured")
-		}
-		srv := m.st.MCPServers[c]
-		lines := []string{
-			styleDetailTitle.Render(srv.Name),
-			"",
-			kv("Type", srv.Type),
-		}
-		if srv.URL != "" {
-			lines = append(lines, kv("URL", srv.URL))
-		}
-		if srv.Plugin != "" {
-			lines = append(lines, kv("Plugin", pluginShortName(srv.Plugin)))
-		}
-		return strings.Join(lines, "\n")
+	case tabSkills, tabPlugins, tabMCP:
+		return m.invDetail(m.tab)
 
 	case tabMemory:
 		memIdx := m.selectedMemoryIdx()
@@ -1049,6 +961,23 @@ func breakWord(w string, width int) []string {
 		r = r[cut:]
 	}
 	return append(out, string(r))
+}
+
+// fitLabel truncates a row label to width, leaving room for its tail and
+// padding so the tail ends flush right.
+func fitLabel(r rowItem, width int) string {
+	if r.tailW == 0 {
+		return truncate(r.label, width)
+	}
+	w := max(1, width-r.tailW)
+	return padRight(truncate(r.label, w), w)
+}
+
+func padRight(s string, w int) string {
+	if n := w - lipgloss.Width(s); n > 0 {
+		return s + strings.Repeat(" ", n)
+	}
+	return s
 }
 
 func shortPath(p string) string {
