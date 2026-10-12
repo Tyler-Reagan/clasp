@@ -269,3 +269,10 @@ func TestLoadFor_SetsSettings(t *testing.T) {
 		t.Error("LoadFor(\"\") should set Settings with ProjectAuto = true")
 	}
 }
+
+func TestLoadFor_SetsInventory(t *testing.T) {
+	s, _ := LoadFor(t.TempDir())
+	if s == nil || s.Inventory == nil {
+		t.Fatal("LoadFor() left Inventory nil")
+	}
+}

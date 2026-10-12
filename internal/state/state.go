@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tylerreagan/clasp/internal/inventory"
 	"github.com/tylerreagan/clasp/internal/settings"
 )
 
@@ -99,6 +100,7 @@ type State struct {
 	MCPServers []MCPServer
 	Memory     []MemoryEntry
 	Settings   *settings.Snapshot
+	Inventory  *inventory.Inventory
 }
 
 func ClaudeDir() string {
@@ -131,6 +133,8 @@ func LoadFor(project string) (*State, error) {
 	// Resolve records per-layer errors itself, so it never feeds firstErr.
 	s.Settings = settings.Resolve(settings.DefaultEnv(), proj)
 	s.Settings.ProjectAuto = project == ""
+	// Load records its own errors too, so it never feeds firstErr.
+	s.Inventory = inventory.Load(inventory.DefaultEnv())
 	return s, firstErr
 }
 
