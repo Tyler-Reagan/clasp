@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -276,5 +277,55 @@ func TestItemPredicates(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSamePluginUnderTwoDesktopAccountsIsNotTwice(t *testing.T) {
+	f := newFixture(t)
+	for _, acct := range []string{acctID, "cccccccc-9999-0000-1111-222222222222"} {
+		f.plugin(filepath.Join(f.env.DesktopDir, "local-agent-mode-sessions", acct, orgID, "rpm", "plugin_x"), plug{
+			name: "design", version: "1.2.0", skills: map[string]string{"ux-copy": skillMD("UX", "body")},
+		})
+	}
+	inv := f.load()
+	noErrs(t, inv)
+	for _, it := range []Item{mustFind(t, inv.Plugins, "design"), mustFind(t, inv.Skills, "ux-copy")} {
+		if len(it.Installs) != 2 || it.Twice(SideDSK) {
+			t.Errorf("%s: installs=%d twice=%v, want 2 installs and not twice", it.Name, len(it.Installs), it.Twice(SideDSK))
+		}
+	}
+}
+
+func TestStdioServersDifferByArgs(t *testing.T) {
+	f := newFixture(t)
+	f.cli("settings.json", `{"mcpServers":{"gh":{"command":"npx","args":["-y","@a/server"]}}}`)
+	f.dsk("claude_desktop_config.json", `{"mcpServers":{"gh":{"command":"npx","args":["-y","@b/server"]}}}`)
+	inv := f.load()
+	noErrs(t, inv)
+	if gh := mustFind(t, inv.MCP, "gh"); !gh.Differs() {
+		t.Errorf("gh with different args should differ: %+v", gh.Installs)
+	}
+}
+
+func TestProjectMCPServers(t *testing.T) {
+	f := newFixture(t)
+	var projs []string
+	for _, name := range []string{"alpha", "beta"} {
+		proj := filepath.Join(f.root, "work", name)
+		projs = append(projs, proj)
+		f.write(filepath.Join(proj, ".mcp.json"), `{"mcpServers":{"db":{"type":"stdio","command":"db-mcp"}}}`)
+		if err := os.MkdirAll(filepath.Join(f.env.ClaudeDir, "projects", strings.ReplaceAll(proj, "/", "-")), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.write(filepath.Join(projs[0], ".claude", "launch.json"), `{}`)
+	inv := f.load()
+	noErrs(t, inv)
+	db := mustFind(t, inv.MCP, "db")
+	if len(db.Installs) != 2 || db.Twice(SideCLI) || db.Installs[0].Origin != OriginProject {
+		t.Errorf("db = %+v, want two project installs, not twice", db.Installs)
+	}
+	if p := mustFind(t, inv.MCP, "Claude Preview (alpha)"); p.Installs[0].Type != "built-in" {
+		t.Errorf("preview = %+v", p.Installs)
 	}
 }

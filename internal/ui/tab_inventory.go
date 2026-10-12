@@ -229,6 +229,8 @@ func originLabel(in inventory.Install) string {
 		return "claude_desktop_config.json"
 	case inventory.OriginSettings:
 		return "settings"
+	case inventory.OriginProject:
+		return "project"
 	case inventory.OriginAccount:
 		return "claude.ai account"
 	}

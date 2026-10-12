@@ -101,3 +101,9 @@ func shortID(id string) string {
 	}
 	return id
 }
+
+// fileExists reports whether path exists and is not a directory.
+func fileExists(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && !fi.IsDir()
+}

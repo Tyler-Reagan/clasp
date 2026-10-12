@@ -51,6 +51,45 @@ func (s cliSource) load(c *collector) {
 		{globalPath, global.MCPServers},
 	})
 	s.loadConnectors(c, globalPath, global.Connected)
+	s.loadProjectMCP(c)
+}
+
+// loadProjectMCP adds servers scoped to a known project: .mcp.json and the
+// project's .claude/settings{,.local}.json, plus the Claude Preview server
+// Claude Code provides when .claude/launch.json exists. Projects come from
+// ~/.claude/projects/<encoded path>; folders that no longer exist are skipped.
+func (s cliSource) loadProjectMCP(c *collector) {
+	encoded, err := subdirs(filepath.Join(s.env.ClaudeDir, "projects"))
+	c.err(err)
+	for _, enc := range encoded {
+		proj := strings.ReplaceAll(enc, "-", "/")
+		if !isDir(proj) {
+			continue
+		}
+		if launch := filepath.Join(proj, ".claude", "launch.json"); fileExists(launch) {
+			c.add(KindMCP, "Claude Preview ("+filepath.Base(proj)+")", Install{
+				Side: SideCLI, Origin: OriginProject, Path: launch, Enabled: true, Type: "built-in",
+			})
+		}
+		for _, path := range []string{
+			filepath.Join(proj, ".mcp.json"),
+			filepath.Join(proj, ".claude", "settings.json"),
+			filepath.Join(proj, ".claude", "settings.local.json"),
+		} {
+			var f mcpFile
+			if _, err := readJSON(path, &f); err != nil {
+				c.err(err)
+				continue
+			}
+			for _, name := range sortedKeys(f.MCPServers) {
+				cfg := f.MCPServers[name]
+				c.add(KindMCP, name, Install{
+					Side: SideCLI, Origin: OriginProject, Path: path, Enabled: true,
+					Hash: mcpHash(cfg), Type: cfg.Type, Target: mcpTarget(cfg),
+				})
+			}
+		}
+	}
 }
 
 // loadPersonal reads ~/.claude/skills/*/SKILL.md, following symlinked dirs.

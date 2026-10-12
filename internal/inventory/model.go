@@ -46,6 +46,7 @@ const (
 	OriginDesktopConfig   = "desktop-config"
 	OriginSettings        = "settings"
 	OriginAccount         = "account"
+	OriginProject         = "project"
 )
 
 // Install is one copy of an Item found in one store.
@@ -116,23 +117,37 @@ func (it Item) Differs() bool {
 }
 
 // Twice reports whether side s holds two installs from the same plugin (or
-// two personal copies). Two different plugins sharing a name is not twice.
+// two personal copies). Two different plugins sharing a name is not twice,
+// nor is one plugin under two accounts or one server in two projects. An
+// install with no account (a marketplace install) matches any account.
 func (it Item) Twice(s Side) bool {
-	seen := map[string]bool{}
+	var ins []Install
 	for _, in := range it.Installs {
-		if in.Side != s {
-			continue
+		if in.Side == s {
+			ins = append(ins, in)
 		}
-		key := "origin:" + in.Origin
-		if in.Plugin != "" {
-			key = "plugin:" + in.Plugin
+	}
+	for i := range ins {
+		for _, b := range ins[i+1:] {
+			if sameSource(ins[i], b) {
+				return true
+			}
 		}
-		if seen[key] {
-			return true
-		}
-		seen[key] = true
 	}
 	return false
+}
+
+func sameSource(a, b Install) bool {
+	if a.Origin == OriginProject || b.Origin == OriginProject {
+		return a.Origin == b.Origin && a.Path == b.Path
+	}
+	if a.Account != "" && b.Account != "" && a.Account != b.Account {
+		return false
+	}
+	if a.Plugin != "" || b.Plugin != "" {
+		return a.Plugin == b.Plugin
+	}
+	return a.Origin == b.Origin
 }
 
 // EnabledSplit reports whether the item is enabled on one side and every

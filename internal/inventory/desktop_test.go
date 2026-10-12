@@ -121,8 +121,9 @@ func TestDesktopConfigMCP(t *testing.T) {
 		in.Hash != sha([]byte("http\nhttps://r.example")) || in.Path != filepath.Join(f.env.DesktopDir, "claude_desktop_config.json") {
 		t.Errorf("remote = %+v", in)
 	}
-	if in := mustFind(t, inv.MCP, "local").Installs[0]; in.Hash != sha([]byte("\nnpx")) {
-		t.Errorf("local hash = %q, want hash of the command", in.Hash)
+	if in := mustFind(t, inv.MCP, "local").Installs[0]; in.Hash != sha([]byte("\nnpx\x00-y\x00srv")) ||
+		in.Target != "npx (+2 args)" {
+		t.Errorf("local = %+v, want hash of command and args, target without args", in)
 	}
 	if !r.OnlyDSK() || !r.Mismatched() {
 		t.Error("a Desktop-only server is mismatched")

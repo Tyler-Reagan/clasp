@@ -51,17 +51,22 @@ func readJSON(path string, v any) (found bool, err error) {
 
 // mcpConfig is the part of an MCP server entry the inventory compares.
 type mcpConfig struct {
-	Type    string `json:"type"`
-	URL     string `json:"url"`
-	Command string `json:"command"`
+	Type    string   `json:"type"`
+	URL     string   `json:"url"`
+	Command string   `json:"command"`
+	Args    []string `json:"args"` // hashed, never shown: args can hold secrets
 }
 
 // mcpHash hashes what makes two servers the same: type plus url, or plus
-// command for servers that have no url.
+// command and args for servers that have no url.
 func mcpHash(cfg mcpConfig) string {
 	target := mcpTarget(cfg)
 	if target == "" {
 		return ""
+	}
+	if cfg.URL == "" && len(cfg.Args) > 0 {
+		// Most stdio servers share a launcher (npx, uvx), so args decide identity.
+		target = cfg.Command + "\x00" + strings.Join(cfg.Args, "\x00")
 	}
 	return sha([]byte(cfg.Type + "\n" + target))
 }
@@ -70,6 +75,9 @@ func mcpHash(cfg mcpConfig) string {
 func mcpTarget(cfg mcpConfig) string {
 	if cfg.URL != "" {
 		return cfg.URL
+	}
+	if cfg.Command != "" && len(cfg.Args) > 0 {
+		return fmt.Sprintf("%s (+%d args)", cfg.Command, len(cfg.Args))
 	}
 	return cfg.Command
 }
