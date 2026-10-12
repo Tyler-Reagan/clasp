@@ -1,0 +1,3371 @@
+{
+  "source": "https://code.claude.com/docs/en/settings-reference.md",
+  "fetched": "2026-10-12",
+  "keys": [
+    {
+      "key": "advisorModel",
+      "anchor": "advisormodel",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Pick which model answers when Claude asks the advisor tool",
+      "type": "string, one of the aliases \"fable\", \"opus\", or \"sonnet\", which resolve to Claude Code's current default version of that model family, or a full model ID such as \"claude-opus-5-5\"",
+      "default": "unset, so the advisor is off",
+      "overrideFlags": [
+        "--advisor"
+      ],
+      "overrideEnv": [
+        "CLAUDE_CODE_DISABLE_ADVISOR_TOOL"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "agent",
+      "anchor": "agent",
+      "topic": "Agents, sessions, and worktrees",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Start every session as a named subagent with its prompt, tools, and model",
+      "type": "string, the name of a built-in or custom agent",
+      "default": "unset, so the main thread runs as Claude Code's default agent",
+      "overrideFlags": [
+        "--agent"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "agentPushNotifEnabled",
+      "anchor": "agentpushnotifenabled",
+      "topic": "Remote, desktop, and notifications",
+      "scope": "Any file",
+      "scopeNote": "Claude Code also reads a value left in ~/.claude.json by older versions.",
+      "summary": "Let Claude send a push notification to your phone when it decides to",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude can send a push notification to your phone when it decides one is worth sending",
+        "false: Claude doesn't send those notifications"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "allowAllClaudeAiMcps",
+      "anchor": "allowallclaudeaimcps",
+      "topic": "MCP",
+      "scope": "Managed",
+      "scopeNote": "Users can't re-enable connectors that exclusive control suppressed.",
+      "summary": "Load the claude.ai connectors Claude Code fetches itself alongside a deployed managed-mcp.json",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code loads the claude.ai connectors alongside a deployed managed-mcp.json",
+        "false: a deployed managed-mcp.json takes exclusive control of MCP servers and suppresses the claude.ai connectors Claude Code fetches itself"
+      ],
+      "default": "false, so a deployed managed-mcp.json suppresses the claude.ai connectors Claude Code fetches itself",
+      "merge": "replace"
+    },
+    {
+      "key": "allowClaudeInChromeWithManagedMcp",
+      "anchor": "allowclaudeinchromewithmanagedmcp",
+      "topic": "MCP",
+      "scope": "Managed",
+      "scopeNote": "from the device's own managed settings only: an MDM-deployed plist or HKLM registry key, or a system managed-settings.json file. Claude Code ignores it in server-managed settings, in the user-writable HKCU registry, and in user or project settings.",
+      "summary": "Let the built-in Claude in Chrome server run alongside a deployed managed-mcp.json",
+      "type": "Boolean",
+      "typeValues": [
+        "true: the built-in Claude in Chrome server can run alongside a deployed managed-mcp.json",
+        "false: a deployed managed-mcp.json blocks Claude in Chrome in terminal sessions"
+      ],
+      "default": "false, so a deployed managed-mcp.json blocks Claude in Chrome in terminal sessions",
+      "merge": "replace"
+    },
+    {
+      "key": "allowedChannelPlugins",
+      "anchor": "allowedchannelplugins",
+      "topic": "Plugins and skills",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Replace the default allowlist of channel plugins that can push messages",
+      "type": "array of objects, each with marketplace and plugin strings. An entry can instead be a \"plugin@marketplace\" string such as \"telegram@claude-plugins-official\", which Claude Code treats as the equivalent object. The string form requires Claude Code v2.1.267 or later; earlier versions reject the whole allowedChannelPlugins value when it contains one",
+      "default": "unset, so Claude Code uses the default Anthropic allowlist",
+      "merge": "list"
+    },
+    {
+      "key": "allowedHttpHookUrls",
+      "anchor": "allowedhttphookurls",
+      "topic": "Hooks and automation",
+      "scope": "Any file",
+      "scopeNote": "Arrays merge across settings files.",
+      "summary": "Limit which URLs HTTP hooks can target",
+      "type": "array of URL patterns, with * as a wildcard",
+      "default": "unset, so any URL is allowed",
+      "merge": "list"
+    },
+    {
+      "key": "allowedMcpServers",
+      "anchor": "allowedmcpservers",
+      "topic": "MCP",
+      "scope": "Any file",
+      "scopeNote": "Entries from every file merge into one allowlist unless allowManagedMcpServersOnly is set. Deploy it in managed settings to enforce it.",
+      "summary": "Allowlist which MCP servers users can add",
+      "type": "array of objects, each with exactly one key: serverName, a string limited to letters, numbers, hyphens, and underscores; serverCommand, an array of the command and its arguments matched exactly; or serverUrl, a URL pattern with * wildcards",
+      "default": "unset, so every server is allowed; an empty array blocks every server users add",
+      "merge": "list"
+    },
+    {
+      "key": "allowedProviders",
+      "anchor": "allowedproviders",
+      "topic": "Authentication and providers",
+      "scope": "Managed",
+      "scopeNote": "A list that the machine's own admin sources set, MDM policies and managed settings files, keeps applying when server-managed settings also deliver one: a session may then use only the providers on both lists, so a server-managed list can narrow what the machine allows but never widen it. Which machine source's allowedProviders counts follows how Claude Code combines managed sources. A list delivered through server-managed settings alone reaches only the sessions that fetch server-managed settings.",
+      "summary": "Limit which API providers a machine may use",
+      "type": "array of strings, each one of:",
+      "typeValues": [
+        "\"anthropic\": the Anthropic API on Anthropic's own host, through a claude.ai or Console sign-in or an API key. Pair it with forceLoginMethod or forceLoginOrgUUID to also restrict the sign-in",
+        "\"bedrock\": Amazon Bedrock",
+        "\"vertex\": Google Cloud's Agent Platform, formerly Vertex AI",
+        "\"foundry\": Microsoft Foundry",
+        "\"anthropicAws\": Claude Platform on AWS",
+        "\"mantle\": the Amazon Bedrock Mantle endpoint. A session that runs Mantle alongside the Invoke API uses both providers, so list \"bedrock\" and \"mantle\" together for it",
+        "\"customEndpoint\": the Anthropic API or a cloud provider's API sent to another host, such as an LLM gateway named by ANTHROPIC_BASE_URL or by a provider's endpoint variable such as ANTHROPIC_BEDROCK_BASE_URL. Claude Code admits it only for the exact value a managed env block pins",
+        "\"gateway\": a Cloud gateway sign-in"
+      ],
+      "default": "unset, so any provider can be used",
+      "merge": "list"
+    },
+    {
+      "key": "allowManagedHooksOnly",
+      "anchor": "allowmanagedhooksonly",
+      "topic": "Hooks and automation",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Run only the hooks your organization deploys",
+      "type": "Boolean",
+      "typeValues": [
+        "true: only managed hooks run, plus Agent SDK hooks and hooks from plugins your managed settings force-enable. See What runs under allowManagedHooksOnly",
+        "false: hooks from every settings scope and plugin run"
+      ],
+      "default": "unset, so hooks from every settings scope and plugin run",
+      "merge": "replace"
+    },
+    {
+      "key": "allowManagedMcpServersOnly",
+      "anchor": "allowmanagedmcpserversonly",
+      "topic": "MCP",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Make the managed MCP allowlist the only one that applies",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code reads allowedMcpServers from managed settings alone and ignores allowlists in user, project, and local settings",
+        "false: allowlists from every settings scope merge"
+      ],
+      "default": "false, so allowlists from every settings scope merge",
+      "merge": "replace"
+    },
+    {
+      "key": "allowManagedPermissionRulesOnly",
+      "anchor": "allowmanagedpermissionrulesonly",
+      "topic": "Permission settings",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Make managed settings the only settings source of permission rules",
+      "type": "Boolean",
+      "typeValues": [
+        "true: managed settings become the only settings source of permission rules",
+        "false: Claude Code applies permission rules from user, project, local, and --settings files in addition to the managed ones"
+      ],
+      "default": "unset, so Claude Code applies permission rules from user, project, and local settings and from --settings, in addition to the managed ones",
+      "merge": "replace"
+    },
+    {
+      "key": "alwaysThinkingEnabled",
+      "anchor": "alwaysthinkingenabled",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn extended thinking off for every session",
+      "type": "Boolean",
+      "typeValues": [
+        "true: no effect; thinking is already on",
+        "false: Claude Code turns extended thinking off for every session"
+      ],
+      "default": "unset, so thinking is on for models that support it",
+      "overrideEnv": [
+        "MAX_THINKING_TOKENS"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "apiKeyHelper",
+      "anchor": "apikeyhelper",
+      "topic": "Authentication and providers",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Generate the API credential with your own command",
+      "type": "string, a shell command line",
+      "default": "unset, so Claude Code doesn't run a helper",
+      "merge": "replace"
+    },
+    {
+      "key": "askUserQuestionTimeout",
+      "anchor": "askuserquestiontimeout",
+      "topic": "Interface and terminal",
+      "scope": "User or managed",
+      "scopeNote": "",
+      "summary": "Let an unanswered question auto-continue after idle time",
+      "type": "string, one of \"60s\", \"5m\", \"10m\", or \"never\"",
+      "default": "\"never\"",
+      "overrideEnv": [
+        "CLAUDE_AFK_TIMEOUT_MS"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "appendPlugins",
+      "anchor": "appendplugins",
+      "topic": "Plugins and skills",
+      "scope": "User or managed",
+      "scopeNote": "Claude Code reads the key from managed settings. It reads the key from user settings only on a machine with no managed settings, for a user who isn't signed in with a Team or Enterprise plan. It ignores the key in project and local settings and in a --settings file.",
+      "summary": "Run your organization's mods after every mod a user installs",
+      "type": "array of plugin-name@marketplace-name strings",
+      "default": "unset",
+      "merge": "list"
+    },
+    {
+      "key": "attribution",
+      "anchor": "attribution",
+      "topic": "Git and attribution",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Customize the attribution Claude Code adds to commits and pull requests",
+      "type": "object with commit and pr strings and a sessionUrl Boolean, or false to hide all attribution. The false value requires Claude Code v2.1.281 or later; earlier versions reject it and skip the whole user, project, or local settings file that holds it",
+      "default": "unset, so Claude Code uses the standard attribution shown under each sub-key",
+      "merge": "undocumented"
+    },
+    {
+      "key": "attribution.commit",
+      "anchor": "attribution-commit",
+      "topic": "Git and attribution",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Change or hide the trailer Claude Code adds to commits",
+      "type": "string",
+      "default": "unset, so Claude Code adds Co-Authored-By: <name> <noreply@anthropic.com>. The name is the model in use when the commit is made, such as Claude Sonnet 5. When a subagent makes the commit, the trailer names the subagent's model. When Claude Code recognizes the model as a Claude model but can't confirm its exact version, it writes Claude alone. When it can't match the model ID to any Claude model, such as a third-party model served through a custom ANTHROPIC_BASE_URL, it writes Claude Code.",
+      "merge": "replace"
+    },
+    {
+      "key": "attribution.pr",
+      "anchor": "attribution-pr",
+      "topic": "Git and attribution",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Change or hide the attribution line in pull request descriptions",
+      "type": "string",
+      "default": "unset, so Claude Code adds 🤖 Generated with Claude Code",
+      "merge": "replace"
+    },
+    {
+      "key": "attribution.sessionUrl",
+      "anchor": "attribution-sessionurl",
+      "topic": "Git and attribution",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Omit the claude.ai session link from cloud and Remote Control commits",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code appends the claude.ai session link when it commits or opens a pull request from a cloud or Remote Control session",
+        "false: Claude Code omits the link"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "autoCompactEnabled",
+      "anchor": "autocompactenabled",
+      "topic": "Memory and context",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn automatic compaction off or on",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code compacts the conversation automatically when context approaches the limit",
+        "false: Claude Code doesn't compact automatically"
+      ],
+      "default": "true",
+      "overrideEnv": [
+        "DISABLE_AUTO_COMPACT"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "autoCompactWindow",
+      "anchor": "autocompactwindow",
+      "topic": "Memory and context",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Set how full the context gets before Claude Code compacts",
+      "type": "number of tokens, from 100000 to 1000000. Claude Code caps the value at your model's context window; the models overview lists each model's window",
+      "default": "unset, so Claude Code picks a window tuned for your model",
+      "overrideFlags": [
+        "--autocompact"
+      ],
+      "overrideEnv": [
+        "CLAUDE_CODE_AUTO_COMPACT_WINDOW"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "autoConnectIde",
+      "anchor": "autoconnectide",
+      "topic": "Global config settings",
+      "scope": "Global config",
+      "scopeNote": "",
+      "summary": "Connect to a running VS Code or JetBrains IDE automatically from an external terminal",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code connects to a running IDE automatically when you start it from an external terminal",
+        "false: Claude Code doesn't connect automatically from an external terminal; inside a VS Code or JetBrains terminal, or with --ide, it still connects"
+      ],
+      "default": "false",
+      "overrideEnv": [
+        "CLAUDE_CODE_AUTO_CONNECT_IDE"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "autoContinueAtUsageLimit",
+      "anchor": "autocontinueatusagelimit",
+      "topic": "Interface and terminal",
+      "scope": "User or managed",
+      "scopeNote": "Read from user settings, --settings, and managed settings only. When none of those sets the key, a project or local settings file that sets it turns the feature off rather than being ignored.",
+      "summary": "Wait in the open session and continue the task automatically after a claude.ai usage limit resets",
+      "type": "Boolean",
+      "typeValues": [
+        "true: after a claude.ai usage limit stops your session, Claude Code waits in the open session and continues the task automatically after the reset",
+        "false: Claude Code doesn't start the wait on its own. You can still start a wait yourself from the usage-limit options menu"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "autoInstallIdeExtension",
+      "anchor": "autoinstallideextension",
+      "topic": "Global config settings",
+      "scope": "Global config",
+      "scopeNote": "",
+      "summary": "Turn off automatic install of the IDE extension from a VS Code terminal",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code installs the IDE extension automatically when you run it from a VS Code terminal",
+        "false: Claude Code doesn't install the extension automatically"
+      ],
+      "default": "true",
+      "overrideEnv": [
+        "CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "autoMemoryDirectory",
+      "anchor": "automemorydirectory",
+      "topic": "Memory and context",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Store auto memory in a directory you choose",
+      "type": "string, an absolute or ~/-prefixed directory path",
+      "default": "unset, so Claude Code uses ~/.claude/projects/<project>/memory/",
+      "merge": "replace"
+    },
+    {
+      "key": "autoMemoryEnabled",
+      "anchor": "automemoryenabled",
+      "topic": "Memory and context",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn auto memory off or on",
+      "type": "Boolean",
+      "typeValues": [
+        "true: the same as unset; auto memory stays on unless something that outranks this key turns it off for the session, such as --bare, safe mode, or CLAUDE_CODE_DISABLE_AUTO_MEMORY",
+        "false: Claude doesn't read from or write to the auto memory directory"
+      ],
+      "default": "true",
+      "overrideEnv": [
+        "CLAUDE_CODE_DISABLE_AUTO_MEMORY"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "autoMode",
+      "anchor": "automode",
+      "topic": "Permission settings",
+      "scope": "User or managed",
+      "scopeNote": "",
+      "summary": "Add your own allow and deny rules to the auto mode classifier",
+      "type": "object with environment, allow, soft_deny, and hard_deny arrays of prose rules, plus the classifyAllShell Boolean",
+      "default": "unset, so the classifier uses only its built-in rules",
+      "merge": "undocumented"
+    },
+    {
+      "key": "autoMode.classifyAllShell",
+      "anchor": "automode-classifyallshell",
+      "topic": "Permission settings",
+      "scope": "User or managed",
+      "scopeNote": "Read wherever autoMode is read.",
+      "summary": "Send every shell command through the auto mode classifier, even ones a narrow allow rule matches",
+      "type": "Boolean",
+      "typeValues": [
+        "true: while auto mode is active, Claude Code sends every Bash and PowerShell command through the classifier and suspends your shell allow rules; outside auto mode the rules still apply",
+        "false: auto mode suspends only allow rules that could run arbitrary code, such as Bash(*) and Bash(python *); a command that any other allow rule matches skips the classifier unless it carries per-command allowed domains, and every other shell command goes through it"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "autoScrollEnabled",
+      "anchor": "autoscrollenabled",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Follow new output to the bottom in fullscreen rendering",
+      "type": "Boolean",
+      "typeValues": [
+        "true: the conversation follows new output to the bottom",
+        "false: you stay where you scrolled while Claude keeps working; permission prompts still appear below the transcript"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "autoUpdatesChannel",
+      "anchor": "autoupdateschannel",
+      "topic": "Updates and versioning",
+      "scope": "Any file",
+      "scopeNote": "Set it in managed settings to enforce one channel across your organization.",
+      "summary": "Follow the stable release channel instead of latest",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"latest\": updates follow the most recent release",
+        "\"stable\": updates follow a version that is typically about one week old and skips releases with major regressions"
+      ],
+      "default": "unset, so Claude Code follows \"latest\"",
+      "merge": "replace"
+    },
+    {
+      "key": "availableModels",
+      "anchor": "availablemodels",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "Deploy it in managed settings to enforce it for an organization.",
+      "summary": "Restrict which models people can pick",
+      "type": "array of model aliases or IDs",
+      "default": "unset, so every model is available",
+      "merge": "list"
+    },
+    {
+      "key": "availableModelsMatch",
+      "anchor": "availablemodelsmatch",
+      "topic": "Model and responses",
+      "scope": "Managed",
+      "scopeNote": "Claude Code ignores the key in user, project, and local settings and in --settings, with a warning",
+      "summary": "Make each availableModels model ID entry permit only the version it names",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"prefix\": a model ID entry permits its version and any model ID that extends it with another segment",
+        "\"exact\": a model ID entry permits only the version it names, including that version's dated IDs, so \"claude-opus-5\" permits Opus 5 but not claude-opus-5-5. A family alias such as \"opus\" still permits the whole family, and best, opusplan, and default entries are ignored"
+      ],
+      "default": "\"prefix\"",
+      "merge": "replace"
+    },
+    {
+      "key": "awaySummaryEnabled",
+      "anchor": "awaysummaryenabled",
+      "topic": "Remote, desktop, and notifications",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn off the session recap shown when you come back to the terminal",
+      "type": "Boolean",
+      "typeValues": [
+        "true: you see a one-line session recap when you return after a few minutes away",
+        "false: Claude Code shows no recap"
+      ],
+      "default": "unset, so the recap is on",
+      "overrideEnv": [
+        "CLAUDE_CODE_ENABLE_AWAY_SUMMARY"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "awsAuthRefresh",
+      "anchor": "awsauthrefresh",
+      "topic": "Authentication and providers",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Refresh expired Bedrock credentials in .aws with your own command",
+      "type": "string, a shell command line",
+      "default": "unset, so Claude Code doesn't refresh AWS credentials for you",
+      "merge": "replace"
+    },
+    {
+      "key": "awsCredentialExport",
+      "anchor": "awscredentialexport",
+      "topic": "Authentication and providers",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Supply Bedrock credentials as JSON from your own command",
+      "type": "string, a shell command line",
+      "default": "unset, so Claude Code uses the ambient AWS credential chain",
+      "merge": "replace"
+    },
+    {
+      "key": "axScreenReader",
+      "anchor": "axscreenreader",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Render screen-reader friendly output",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code renders flat text without decorative borders or animations, using the classic renderer",
+        "false: Claude Code renders normally"
+      ],
+      "default": "unset, so screen-reader mode is off",
+      "overrideFlags": [
+        "--ax-screen-reader"
+      ],
+      "overrideEnv": [
+        "CLAUDE_AX_SCREEN_READER"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "bashEditDiffEnabled",
+      "anchor": "basheditdiffenabled",
+      "topic": "Interface and terminal",
+      "scope": "User or managed",
+      "scopeNote": "A true counts only from your user settings, JSON passed with --settings, or managed settings, so a true in a repository's .claude/settings.json or .claude/settings.local.json can't turn the recording on. A false in either repository file still turns it off unless a higher-precedence file sets true.",
+      "summary": "Record the files that changed while a Bash command ran in every permission mode",
+      "type": "Boolean",
+      "default": "unset, so Claude Code records changes in auto mode and bypassPermissions mode when it directs Claude to edit files through Bash",
+      "overrideEnv": [
+        "CLAUDE_CODE_BASH_EDIT_DIFF"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "bashOutputMaxChars",
+      "anchor": "bashoutputmaxchars",
+      "topic": "Memory and context",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Set how much of a successful command's output Claude receives inline",
+      "type": "number of characters, a positive integer. Claude Code clamps the value into the range 4000 to 128000",
+      "default": "unset, so Claude receives up to 30,000 characters inline",
+      "merge": "replace"
+    },
+    {
+      "key": "blockedMarketplaces",
+      "anchor": "blockedmarketplaces",
+      "topic": "Plugins and skills",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Block plugin marketplace sources for your organization",
+      "type": "array of marketplace source objects, in the same forms as strictKnownMarketplaces",
+      "default": "unset, so no marketplace is blocked",
+      "merge": "list"
+    },
+    {
+      "key": "browserExternalPageTools",
+      "anchor": "browserexternalpagetools",
+      "topic": "Tools",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Keep Claude's tools off external pages in the desktop Browser pane",
+      "type": "string, \"disabled\"; the desktop app also accepts \"disable\", in either case",
+      "default": "unset, so Claude's tools work on external pages",
+      "merge": "replace"
+    },
+    {
+      "key": "channelsEnabled",
+      "anchor": "channelsenabled",
+      "topic": "Plugins and skills",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Allow channels for your organization",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code allows channels for your organization",
+        "false: the same as unset; whether channels are blocked depends on your plan, as the Default says"
+      ],
+      "default": "unset; channels are blocked on Team and Enterprise plans and on Console accounts with managed settings, and allowed on Pro and Max plans and on Console accounts without managed settings",
+      "merge": "replace"
+    },
+    {
+      "key": "claudeInChromeDefaultEnabled",
+      "anchor": "claudeinchromedefaultenabled",
+      "topic": "Global config settings",
+      "scope": "Global config",
+      "scopeNote": "",
+      "summary": "Turn on Chrome integration when a session starts, in the interactive CLI and the VS Code extension",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code turns on Chrome integration when an interactive CLI session starts, as it does when you pass --chrome. In the VS Code extension, sessions connect to the browser as they start",
+        "false: interactive CLI sessions start with Chrome integration off, and Claude Code stops offering to set it up. Pass --chrome to turn it on for one interactive session. In the VS Code extension, a session connects when you type @browser, as when the key is unset"
+      ],
+      "default": "unset, so Chrome integration is off and Claude Code can still offer to set it up",
+      "overrideFlags": [
+        "--chrome",
+        "--no-chrome"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "claudeMd",
+      "anchor": "claudemd",
+      "topic": "Memory and context",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Inject organization-wide CLAUDE.md instructions from managed settings",
+      "type": "string, the text of a CLAUDE.md file; write it as you would the file, Markdown included, with line breaks as \\n",
+      "default": "unset",
+      "merge": "replace"
+    },
+    {
+      "key": "claudeMdExcludes",
+      "anchor": "claudemdexcludes",
+      "topic": "Memory and context",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Skip specific CLAUDE.md files when memory loads",
+      "type": "array of strings, each a glob pattern or absolute path",
+      "default": "unset, so Claude Code loads every CLAUDE.md it finds",
+      "merge": "list"
+    },
+    {
+      "key": "cleanupPeriodDays",
+      "anchor": "cleanupperioddays",
+      "topic": "Privacy and telemetry",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Choose how many days Claude Code keeps transcripts before deleting them",
+      "type": "number of days, a whole number, minimum 1",
+      "default": "30",
+      "merge": "replace"
+    },
+    {
+      "key": "companyAnnouncements",
+      "anchor": "companyannouncements",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Show your organization's announcements at startup",
+      "type": "array of strings",
+      "default": "unset, so no announcement shows",
+      "merge": "list"
+    },
+    {
+      "key": "copyFullResponse",
+      "anchor": "copyfullresponse",
+      "topic": "Global config settings",
+      "scope": "Global config",
+      "scopeNote": "",
+      "summary": "Make /copy copy the full response without showing the picker",
+      "type": "Boolean",
+      "typeValues": [
+        "true: /copy copies the full response without showing the picker",
+        "false: when the response contains code blocks or blockquotes, /copy shows a picker where you choose one block or the full response"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "copyOnSelect",
+      "anchor": "copyonselect",
+      "topic": "Global config settings",
+      "scope": "Global config",
+      "scopeNote": "",
+      "summary": "Turn off automatic copying of text you select with the mouse in fullscreen rendering and agent view",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code copies text to your clipboard when you finish selecting it",
+        "false: selecting text leaves your clipboard unchanged, and you copy the selection with a keyboard shortcut instead"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "crossSessionInbound",
+      "anchor": "crosssessioninbound",
+      "topic": "Agents, sessions, and worktrees",
+      "scope": "Any file",
+      "scopeNote": "A project or local value applies only when it's stricter than the value managed settings, the --settings flag, or user settings give.",
+      "summary": "Choose whether Claude Code delivers messages from your other sessions, shows a notice without delivering them, or refuses them",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"accept\": Claude Code delivers the message to Claude",
+        "\"hold\": Claude Code shows a notice for the message without delivering it",
+        "\"refuse\": Claude Code drops the message"
+      ],
+      "default": "unset, so Claude Code decides per message",
+      "merge": "replace"
+    },
+    {
+      "key": "defaultShell",
+      "anchor": "defaultshell",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Choose whether Bash or PowerShell runs the shell commands you type with the ! prefix",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"bash\": Claude Code runs your ! commands in Bash",
+        "\"powershell\": Claude Code runs your ! commands in PowerShell"
+      ],
+      "default": "\"bash\", or \"powershell\" on Windows when Bash isn't available",
+      "merge": "replace"
+    },
+    {
+      "key": "defaultToAgentsView",
+      "anchor": "defaulttoagentsview",
+      "topic": "Global config settings",
+      "scope": "Global config",
+      "scopeNote": "",
+      "summary": "Open agent view instead of a new conversation when you run claude with no arguments",
+      "type": "Boolean",
+      "typeValues": [
+        "true: claude with no arguments opens agent view, unless agent view is turned off",
+        "false: claude with no arguments starts a new conversation"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "deniedMcpServers",
+      "anchor": "deniedmcpservers",
+      "topic": "MCP",
+      "scope": "Any file",
+      "scopeNote": "Entries from every file merge into one denylist, and allowManagedMcpServersOnly doesn't change that. Deploy it in managed settings to enforce it.",
+      "summary": "Block specific MCP servers by URL, command, or name",
+      "type": "array of objects, each with exactly one key: serverName, a string, so a claude.ai connector's display name such as \"claude.ai Slack\" works; serverCommand, an array of the command and its arguments matched exactly; or serverUrl, a URL pattern with * wildcards",
+      "default": "unset, so no server is blocked; an empty array also blocks nothing",
+      "merge": "list"
+    },
+    {
+      "key": "deniedModels",
+      "anchor": "deniedmodels",
+      "topic": "Model and responses",
+      "scope": "Managed",
+      "scopeNote": "Claude Code ignores the key in user, project, and local settings and in --settings, with a warning",
+      "summary": "Block specific models, even ones availableModels permits",
+      "type": "array of model aliases or IDs",
+      "typeValues": [
+        "A family alias such as \"opus\" blocks every model in that family",
+        "A model ID such as \"claude-opus-5-5\" blocks that version in every spelling, including dated and provider-specific IDs",
+        "A model ID with no minor version, such as \"claude-opus-5\", also blocks later minor versions such as Opus 5.5. Write \"claude-opus-5-0\" to block Opus 5 alone",
+        "best, opusplan, and default entries are ignored"
+      ],
+      "default": "unset, so no model is blocked",
+      "merge": "list"
+    },
+    {
+      "key": "desktopSessionCleanupPeriodDays",
+      "anchor": "desktopsessioncleanupperioddays",
+      "topic": "Privacy and telemetry",
+      "scope": "User or managed",
+      "scopeNote": "Claude Code also reads the key from a file you pass with --settings, and ignores it in project and local settings.",
+      "summary": "Set an age limit in days for Claude Desktop and Cowork transcripts",
+      "type": "number of days, a whole number, minimum 0",
+      "default": "0, which sets no age limit",
+      "merge": "replace"
+    },
+    {
+      "key": "dialogExpiry",
+      "anchor": "dialogexpiry",
+      "topic": "Interface and terminal",
+      "scope": "User or managed",
+      "scopeNote": "",
+      "summary": "Set how long Claude Code waits for Remote Control or an SDK host to answer a forwarded dialog before it cancels the dialog",
+      "type": "string, one of \"60s\", \"5m\", \"10m\", or \"never\", which disables the deadline",
+      "default": "\"5m\"",
+      "overrideEnv": [
+        "CLAUDE_CODE_USER_DIALOG_TIMEOUT_MS"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "diffTool",
+      "anchor": "difftool",
+      "topic": "Global config settings",
+      "scope": "Global config",
+      "scopeNote": "",
+      "summary": "Choose whether Claude's proposed file changes open in the VS Code or JetBrains diff viewer or stay in the terminal",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"auto\": Claude Code opens the diff in the IDE's diff viewer when a VS Code or JetBrains IDE is connected",
+        "\"terminal\": Claude Code keeps the diff in the terminal"
+      ],
+      "default": "\"auto\"",
+      "merge": "replace"
+    },
+    {
+      "key": "disableAgentView",
+      "anchor": "disableagentview",
+      "topic": "Agents, sessions, and worktrees",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn off background agents and agent view",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code turns off claude agents, --bg, /background, and the on-demand supervisor",
+        "false: agent view is available"
+      ],
+      "default": "unset, so agent view is available",
+      "overrideEnv": [
+        "CLAUDE_CODE_DISABLE_AGENT_VIEW"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "disableAllHooks",
+      "anchor": "disableallhooks",
+      "topic": "Hooks and automation",
+      "scope": "Any file",
+      "scopeNote": "Only managed settings can disable managed hooks.",
+      "summary": "Turn off hooks, a custom status line, and a custom @ file suggestion command at once",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code turns off hooks, any custom status line, and any custom file suggestion command",
+        "false: hooks, the status line, and the file suggestion command run"
+      ],
+      "default": "unset, so hooks run",
+      "merge": "replace"
+    },
+    {
+      "key": "disableArtifact",
+      "anchor": "disableartifact",
+      "topic": "Remote, desktop, and notifications",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Deprecated; use enableArtifact to turn the Artifact tool off",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code turns the Artifact tool off for every session the file applies to, and no other file turns it back on",
+        "false: ignored; to leave the tool on, remove the key"
+      ],
+      "default": "unset, so the tool follows your account's availability",
+      "overrideEnv": [
+        "CLAUDE_CODE_DISABLE_ARTIFACT"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "disableAutoMode",
+      "anchor": "disableautomode",
+      "topic": "Permission settings",
+      "scope": "Any file",
+      "scopeNote": "Most useful in managed settings, where users can't override it. Also accepted under permissions as permissions.disableAutoMode.",
+      "summary": "Remove auto mode from the permission mode cycle",
+      "type": "the string \"disable\"",
+      "default": "unset",
+      "merge": "replace"
+    },
+    {
+      "key": "disableBrowserExternalNavigation",
+      "anchor": "disablebrowserexternalnavigation",
+      "topic": "Tools",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Limit the desktop Browser pane to localhost for people and Claude",
+      "type": "Boolean; only the JSON Boolean true takes effect",
+      "typeValues": [
+        "true: the desktop app turns off external browsing in the Browser pane for people and Claude alike; localhost previews keep working",
+        "false: external browsing stays on"
+      ],
+      "default": "unset, so external browsing is on",
+      "merge": "replace"
+    },
+    {
+      "key": "disableBundledSkills",
+      "anchor": "disablebundledskills",
+      "topic": "Plugins and skills",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn off the skills and workflows included with Claude Code",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code removes bundled skills and workflows and hides built-in commands such as /init from the model",
+        "false: bundled skills load"
+      ],
+      "default": "unset, so bundled skills load",
+      "overrideEnv": [
+        "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "disableClaudeAiConnectors",
+      "anchor": "disableclaudeaiconnectors",
+      "topic": "MCP",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn off claude.ai connectors so Claude Code doesn't fetch them",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code neither fetches nor connects those connectors",
+        "false: the same as unset; Claude Code fetches your connectors unless another settings file or ENABLE_CLAUDEAI_MCP_SERVERS turns them off"
+      ],
+      "default": "false, so Claude Code fetches your connectors",
+      "overrideEnv": [
+        "ENABLE_CLAUDEAI_MCP_SERVERS"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "disableCommandPluginSources",
+      "anchor": "disablecommandpluginsources",
+      "topic": "Plugins and skills",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Block plugins that install by running a marketplace-declared command",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code never runs the marketplace-declared command, doesn't install or update command-sourced plugins, and stops loading the ones already installed",
+        "false: Claude Code allows command-sourced plugins explicitly"
+      ],
+      "default": "unset, so Claude Code follows allowManagedHooksOnly: an organization that restricts hook execution to managed settings gets command sources disabled too",
+      "merge": "replace"
+    },
+    {
+      "key": "disableDeepLinkRegistration",
+      "anchor": "disabledeeplinkregistration",
+      "topic": "Remote, desktop, and notifications",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Stop Claude Code from registering the claude-cli:// handler",
+      "type": "the string \"disable\"",
+      "default": "unset, so Claude Code registers the handler",
+      "merge": "replace"
+    },
+    {
+      "key": "disableDesktopLocalSessions",
+      "anchor": "disabledesktoplocalsessions",
+      "topic": "Remote, desktop, and notifications",
+      "scope": "Managed",
+      "scopeNote": "By default, the desktop app reads the key from one managed source.",
+      "summary": "Turn off Desktop Code sessions that run on the device, leaving SSH to other hosts and cloud",
+      "type": "Boolean; only the JSON Boolean true takes effect",
+      "typeValues": [
+        "true: the desktop app offers no on-device Code sessions; existing local sessions stay listed but can't continue",
+        "false: local sessions stay available"
+      ],
+      "default": "unset, so local sessions are available",
+      "merge": "replace"
+    },
+    {
+      "key": "disabledMcpjsonServers",
+      "anchor": "disabledmcpjsonservers",
+      "topic": "MCP",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Reject specific servers from a project's .mcp.json",
+      "type": "array of strings, the server names as they appear in .mcp.json",
+      "default": "unset",
+      "merge": "list"
+    },
+    {
+      "key": "disableMobileSimulatorTools",
+      "anchor": "disablemobilesimulatortools",
+      "topic": "Tools",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Block Claude's tools in the desktop iOS Simulator pane",
+      "type": "Boolean; only the JSON Boolean true takes effect",
+      "typeValues": [
+        "true: the desktop app blocks Claude's tools for the iOS Simulator pane",
+        "false: Claude's simulator tools follow each person's settings toggle in the desktop app"
+      ],
+      "default": "unset, so Claude's simulator tools follow each person's settings toggle in the desktop app",
+      "merge": "replace"
+    },
+    {
+      "key": "disableRemoteControl",
+      "anchor": "disableremotecontrol",
+      "topic": "Remote, desktop, and notifications",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn off Remote Control everywhere it can start",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code refuses claude remote-control, the --remote-control flag, auto-start, and the in-session toggle",
+        "false: Remote Control stays available"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "disableSideloadFlags",
+      "anchor": "disablesideloadflags",
+      "topic": "Enterprise and managed settings",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Reject the CLI flags that sideload plugins, subagents, and MCP servers",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code rejects --plugin-dir, --plugin-url, --agents, and --mcp-config at startup and exits with an error naming them. In cloud sessions, it instead starts the session and drops every server-delivered --mcp-config entry except in-process type: \"sdk\" entries and a Claude Tag session's Slack tools",
+        "false: Claude Code accepts those flags"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "disableSkillShellExecution",
+      "anchor": "disableskillshellexecution",
+      "topic": "Plugins and skills",
+      "scope": "Any file",
+      "scopeNote": "A true in managed settings can't be overridden by false elsewhere.",
+      "summary": "Stop skills and custom commands from running inline shell",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code replaces each inline shell command with [shell command execution disabled by policy] instead of running it",
+        "false: inline shell runs"
+      ],
+      "default": "unset, so inline shell runs",
+      "merge": "replace"
+    },
+    {
+      "key": "disableWorkflows",
+      "anchor": "disableworkflows",
+      "topic": "Hooks and automation",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn dynamic workflows off for everyone; use enableWorkflows for yourself",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code turns off dynamic workflows and the bundled workflow commands for everyone your settings reach",
+        "false: the same as unset; whether workflows are on then follows enableWorkflows and your plan's default"
+      ],
+      "default": "false",
+      "overrideEnv": [
+        "CLAUDE_CODE_DISABLE_WORKFLOWS"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "editorMode",
+      "anchor": "editormode",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Use vim key bindings in the input prompt",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"normal\": standard key bindings in the prompt input",
+        "\"vim\": vim-style editing with NORMAL, INSERT, and VISUAL modes"
+      ],
+      "default": "\"normal\"",
+      "merge": "replace"
+    },
+    {
+      "key": "effortLevel",
+      "anchor": "effortlevel",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Set a default effort level for models without a saved level of their own",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"low\": the least reasoning, for short, scoped, latency-sensitive tasks that aren't intelligence-sensitive",
+        "\"medium\": reduces token usage for cost-sensitive work that can trade off some intelligence",
+        "\"high\": balances token usage and intelligence",
+        "\"xhigh\": deeper reasoning at higher token spend"
+      ],
+      "default": "unset",
+      "overrideFlags": [
+        "--effort"
+      ],
+      "overrideEnv": [
+        "CLAUDE_CODE_EFFORT_LEVEL"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "emojiCompletionEnabled",
+      "anchor": "emojicompletionenabled",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn off :shortcode: emoji suggestions and replacement in the prompt input",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code shows emoji suggestions after : and replaces a completed shortcode with its emoji",
+        "false: Claude Code neither suggests emoji nor replaces shortcodes"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "enableAllProjectMcpServers",
+      "anchor": "enableallprojectmcpservers",
+      "topic": "MCP",
+      "scope": "Any file",
+      "scopeNote": "In a folder whose trust dialog you haven't accepted, Claude Code honors it from user settings, managed settings, and --settings and ignores it in the shared project file, both in the session and for claude mcp list and claude mcp get; Project server approvals and workspace trust says when an untracked .claude/settings.local.json counts too.",
+      "summary": "Approve every server in project .mcp.json files without a prompt",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code approves every MCP server defined in project .mcp.json files without a prompt",
+        "false: Claude Code asks you to approve each server. In a trusted folder, a false in a higher-precedence file overrides a true in a lower one; in a folder you haven't trusted, a true in any honored file is enough"
+      ],
+      "default": "unset, so Claude Code asks you to approve each server",
+      "merge": "replace"
+    },
+    {
+      "key": "enableArtifact",
+      "anchor": "enableartifact",
+      "topic": "Remote, desktop, and notifications",
+      "scope": "Any file",
+      "scopeNote": "Every file can turn the tool off, and none can turn it back on.",
+      "summary": "Turn the Artifact tool off with a false in any file; no file can turn it back on",
+      "type": "Boolean",
+      "typeValues": [
+        "false: Claude Code turns the Artifact tool off for every session the file applies to",
+        "true: the same as leaving the key unset, because it never overrides a false from another file, from CLAUDE_CODE_DISABLE_ARTIFACT, or from your organization's admin setting"
+      ],
+      "default": "unset, so the tool follows your account's availability",
+      "merge": "replace"
+    },
+    {
+      "key": "enabledMcpjsonServers",
+      "anchor": "enabledmcpjsonservers",
+      "topic": "MCP",
+      "scope": "Any file",
+      "scopeNote": "In a folder whose trust dialog you haven't accepted, Claude Code honors it from user settings, managed settings, and --settings and ignores it in the shared project file, both in the session and for claude mcp list and claude mcp get; Project server approvals and workspace trust says when an untracked .claude/settings.local.json counts too.",
+      "summary": "Approve specific servers from a project's .mcp.json",
+      "type": "array of strings, the server names as they appear in .mcp.json",
+      "default": "unset",
+      "merge": "list"
+    },
+    {
+      "key": "enabledPlugins",
+      "anchor": "enabledplugins",
+      "topic": "Plugins and skills",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn individual plugins on or off per scope",
+      "type": "object mapping plugin-name@marketplace-name to a Boolean",
+      "default": "unset, so each plugin follows its defaultEnabled value",
+      "merge": "map"
+    },
+    {
+      "key": "enableWorkflows",
+      "anchor": "enableworkflows",
+      "topic": "Hooks and automation",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn dynamic workflows on or off against your plan's default",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code turns dynamic workflows on for you",
+        "false: Claude Code turns dynamic workflows off for you"
+      ],
+      "default": "unset, so workflows are on unless you're on the Pro plan, where they're off",
+      "overrideEnv": [
+        "CLAUDE_CODE_DISABLE_WORKFLOWS"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "enforceAvailableModels",
+      "anchor": "enforceavailablemodels",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Keep the /model Default choice inside your availableModels allowlist",
+      "type": "Boolean",
+      "typeValues": [
+        "true: when Default would resolve to a model outside availableModels, Claude Code resolves it to the first available model in the list",
+        "false: this key doesn't change how Default resolves"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "env",
+      "anchor": "env",
+      "topic": "Memory and context",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Set environment variables for every session and its subprocesses",
+      "type": "object mapping variable names to string values",
+      "default": "unset",
+      "merge": "map"
+    },
+    {
+      "key": "externalEditorContext",
+      "anchor": "externaleditorcontext",
+      "topic": "Global config settings",
+      "scope": "Global config",
+      "scopeNote": "",
+      "summary": "Show Claude's last response as comments when you press Ctrl+G to edit",
+      "type": "Boolean",
+      "typeValues": [
+        "true: the editor buffer starts with Claude's previous response as # comment lines, which Claude Code strips when you save",
+        "false: the editor buffer opens with only your prompt"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "extraKnownMarketplaces",
+      "anchor": "extraknownmarketplaces",
+      "topic": "Plugins and skills",
+      "scope": "Any file",
+      "scopeNote": "Claude Code honors entries in a repository's .claude/settings.json or .claude/settings.local.json only after you accept the workspace trust dialog for that folder; in a folder you haven't trusted, including a -p run there, it ignores them without a message.",
+      "summary": "Register marketplaces for a repository or an organization",
+      "type": "object mapping a marketplace name to an object with a source object and an optional autoUpdate Boolean",
+      "default": "unset",
+      "merge": "map"
+    },
+    {
+      "key": "fallbackModel",
+      "anchor": "fallbackmodel",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Name backup models for when the primary is overloaded",
+      "type": "array of model aliases or IDs; \"default\" expands to the default model",
+      "default": "unset, so a failed request isn't retried on another model",
+      "overrideFlags": [
+        "--fallback-model"
+      ],
+      "merge": "list"
+    },
+    {
+      "key": "fastMode",
+      "anchor": "fastmode",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn fast mode on for sessions where it's available",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code turns fast mode on for sessions where it's available",
+        "false: fast mode stays off"
+      ],
+      "default": "unset, so fast mode is off",
+      "overrideEnv": [
+        "CLAUDE_CODE_DISABLE_FAST_MODE"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "fastModePerSessionOptIn",
+      "anchor": "fastmodepersessionoptin",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Require people to turn fast mode on each session",
+      "type": "Boolean",
+      "typeValues": [
+        "true: a saved fastMode: true no longer turns fast mode on at session start, so each person runs /fast in each session they want it; a fastMode: true passed with --settings still counts for that session unless managed settings set this key",
+        "false: a saved fastMode: true turns fast mode on at the start of every later session"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "feedbackDrafts",
+      "anchor": "feedbackdrafts",
+      "topic": "Privacy and telemetry",
+      "scope": "User or managed",
+      "scopeNote": "",
+      "summary": "Control whether Claude queues feedback drafts for you to review",
+      "type": "string, one of \"notify\", \"quiet\", or \"off\"",
+      "typeValues": [
+        "\"notify\": Claude Code shows a card above the prompt when Claude queues a draft, up to three cards in a session by default",
+        "\"quiet\": Claude drafts without a card. You see the count of queued drafts in the prompt footer and review them in /feedback",
+        "\"off\": Claude Code removes the SendFeedback tool, so Claude can't queue drafts"
+      ],
+      "default": "\"notify\"",
+      "overrideEnv": [
+        "CLAUDE_CODE_SEND_FEEDBACK"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "feedbackSurveyRate",
+      "anchor": "feedbacksurveyrate",
+      "topic": "Privacy and telemetry",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Change how often the session quality survey appears",
+      "type": "number between 0 and 1",
+      "default": "unset, so Claude Code uses the rate Anthropic sets remotely, or its built-in rate of 0.005 on Amazon Bedrock, Google Cloud's Agent Platform, and Microsoft Foundry, which don't receive remote configuration",
+      "overrideEnv": [
+        "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "fileCheckpointingEnabled",
+      "anchor": "filecheckpointingenabled",
+      "topic": "Memory and context",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn off or on the file snapshots that /rewind restores",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code snapshots files before each edit so /rewind can restore them",
+        "false: Claude Code doesn't snapshot files, so /rewind can't restore them"
+      ],
+      "default": "true",
+      "overrideEnv": [
+        "CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "fileSuggestion",
+      "anchor": "filesuggestion",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "Under the status line and file suggestion gates, Claude Code turns the command off or runs only a managed value, and skips yours without warning.",
+      "summary": "Supply @ file autocomplete from your own command",
+      "type": "object with type, always \"command\", and command, the shell command to run",
+      "default": "unset, so Claude Code uses the built-in file suggestion",
+      "merge": "undocumented"
+    },
+    {
+      "key": "footerLinksRegexes",
+      "anchor": "footerlinksregexes",
+      "topic": "Interface and terminal",
+      "scope": "User or managed",
+      "scopeNote": "",
+      "summary": "Make issue or review IDs in output into clickable links below the input box",
+      "type": "array of objects, each with type set to \"regex\", a pattern regex, a url template, and an optional label; {name} placeholders in url and label are filled from named capture groups in pattern",
+      "default": "unset, so no badges render",
+      "merge": "list"
+    },
+    {
+      "key": "forceLoginGatewayUrl",
+      "anchor": "forcelogingatewayurl",
+      "topic": "Authentication and providers",
+      "scope": "User or managed",
+      "scopeNote": "Read from a managed source on the machine: managed-settings.json, the macOS plist or Windows HKLM registry, or a policy helper. On a machine with none of those, Claude Code v2.1.295 or later also reads it from user settings. Claude Code ignores it in HKCU and server-managed settings.",
+      "summary": "Set the gateway URL the login screen connects to",
+      "type": "string, a full URL including the scheme",
+      "default": "unset, so the Cloud gateway screen shows an error telling people to contact their IT administrator",
+      "merge": "replace"
+    },
+    {
+      "key": "forceLoginMethod",
+      "anchor": "forceloginmethod",
+      "topic": "Authentication and providers",
+      "scope": "Any file",
+      "scopeNote": "Claude Code honors \"gateway\" from the same sources as forceLoginGatewayUrl and treats it as unset everywhere else.",
+      "summary": "Restrict login to claude.ai, Claude Console, or a cloud gateway",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"claudeai\": only claude.ai accounts can log in",
+        "\"console\": only Claude Console accounts can log in",
+        "\"gateway\": Claude Code sends people to a cloud gateway instead of a first-party login"
+      ],
+      "default": "unset, so people pick a login method",
+      "merge": "replace"
+    },
+    {
+      "key": "forceLoginOrgUUID",
+      "anchor": "forceloginorguuid",
+      "topic": "Authentication and providers",
+      "scope": "Any file",
+      "scopeNote": "Only a managed source enforces the restriction; a single UUID in any other settings file pre-selects the organization during login without restricting it.",
+      "summary": "Pin claude.ai logins to your organization; only a managed source enforces it",
+      "type": "string, one UUID, or array of strings, several UUIDs",
+      "default": "unset, so any organization can log in",
+      "merge": "replace"
+    },
+    {
+      "key": "forceRemoteSettingsRefresh",
+      "anchor": "forceremotesettingsrefresh",
+      "topic": "Enterprise and managed settings",
+      "scope": "Managed",
+      "scopeNote": "Claude Code honors a true from any admin-controlled managed source, even one that isn't the highest-priority source.",
+      "summary": "Block startup until server-managed settings are freshly fetched",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code blocks startup until it has freshly fetched server-managed settings, and exits if the fetch fails",
+        "false: Claude Code doesn't block startup on the fetch, though at a sign-in startup it waits up to five seconds for the fetch"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "gatewayInternalNetworks",
+      "anchor": "gatewayinternalnetworks",
+      "topic": "Authentication and providers",
+      "scope": "Managed",
+      "scopeNote": "Read only from a source on the machine: managed-settings.json, the macOS plist or Windows HKLM registry, or a policy helper. Claude Code ignores it in HKCU and server-managed settings.",
+      "summary": "Let /login reach a cloud gateway on public IPv4 space your organization uses internally",
+      "type": "array of strings, at most four IPv4 CIDR blocks, each /8 to /32, not overlapping one another, and none overlapping private space.",
+      "default": "unset, so /login accepts only gateways on private addresses",
+      "merge": "list"
+    },
+    {
+      "key": "gcpAuthRefresh",
+      "anchor": "gcpauthrefresh",
+      "topic": "Authentication and providers",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Refresh Google Cloud credentials with your own command",
+      "type": "string, a shell command line",
+      "default": "unset, so Claude Code's credential error tells you to run gcloud auth application-default login yourself",
+      "merge": "replace"
+    },
+    {
+      "key": "hooks",
+      "anchor": "hooks",
+      "topic": "Hooks and automation",
+      "scope": "Any file",
+      "scopeNote": "Hooks merge across files rather than replacing each other, and hooks from managed settings can't be removed from other files.",
+      "summary": "Run your own commands as hooks at points in Claude Code's lifecycle",
+      "type": "object keyed by hook event; each value is an array of { \"matcher\", \"hooks\" } groups whose hooks entries have a type of \"command\", \"prompt\", \"agent\", \"http\", or \"mcp_tool\"",
+      "default": "unset, so no hooks run",
+      "merge": "map"
+    },
+    {
+      "key": "httpHookAllowedEnvVars",
+      "anchor": "httphookallowedenvvars",
+      "topic": "Hooks and automation",
+      "scope": "Any file",
+      "scopeNote": "Arrays merge across settings files.",
+      "summary": "Limit which env vars HTTP hooks can put in headers",
+      "type": "array of environment variable names",
+      "default": "unset, so each hook's own allowedEnvVars list applies",
+      "merge": "list"
+    },
+    {
+      "key": "includeCoAuthoredBy",
+      "anchor": "includecoauthoredby",
+      "topic": "Git and attribution",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Deprecated; use attribution to hide or change commit and PR attribution",
+      "type": "Boolean",
+      "typeValues": [
+        "true: the same as unset; Claude Code adds the commit trailer and the pull request attribution text",
+        "false: Claude Code omits both the commit trailer and the pull request attribution text, unless attribution sets commit or pr, in which case the attribution rules apply"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "includeGitInstructions",
+      "anchor": "includegitinstructions",
+      "topic": "Git and attribution",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Remove the built-in commit and PR instructions from Claude's context",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code includes its built-in commit and pull request workflow instructions and the git status snapshot. Cloud sessions never include the snapshot",
+        "false: Claude Code leaves both out"
+      ],
+      "default": "true",
+      "overrideEnv": [
+        "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "inputNeededNotifEnabled",
+      "anchor": "inputneedednotifenabled",
+      "topic": "Remote, desktop, and notifications",
+      "scope": "Any file",
+      "scopeNote": "Claude Code also reads a value left in ~/.claude.json by older versions.",
+      "summary": "Get a push notification when Claude is waiting on you",
+      "type": "Boolean",
+      "typeValues": [
+        "true: you get a push notification on your phone when a permission prompt or question is waiting, while Remote Control is connected",
+        "false: Claude Code sends no such notifications"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "isolatePeerMachines",
+      "anchor": "isolatepeermachines",
+      "topic": "Agents, sessions, and worktrees",
+      "scope": "Any file",
+      "scopeNote": "A true from any scope applies, so a checked-in project file can turn the requirement on but not off.",
+      "summary": "Ask you before Claude messages one of your sessions on another machine",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code asks for your approval before Claude's SendMessage reaches one of your sessions beyond this machine",
+        "false: cross-machine messages don't prompt"
+      ],
+      "default": "unset, so cross-machine messages don't prompt",
+      "merge": "replace"
+    },
+    {
+      "key": "keybindingFlavor",
+      "anchor": "keybindingflavor",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Deprecated and has no effect; the word-editing shortcuts always follow readline conventions",
+      "type": "string, \"classic\" or \"readline\"",
+      "default": "unset",
+      "merge": "replace"
+    },
+    {
+      "key": "language",
+      "anchor": "language",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Have Claude respond in a language other than English",
+      "type": "string, any language name, such as \"japanese\", \"spanish\", or \"french\"; Claude Code doesn't validate it",
+      "default": "unset; session titles then match the language of your conversation",
+      "merge": "replace"
+    },
+    {
+      "key": "leftArrowOpensAgents",
+      "anchor": "leftarrowopensagents",
+      "topic": "Global config settings",
+      "scope": "Global config",
+      "scopeNote": "",
+      "summary": "Turn off the ← shortcut that backgrounds the session and opens agent view",
+      "type": "Boolean",
+      "typeValues": [
+        "true: pressing ← on an empty prompt in a session you started in the terminal backgrounds it and opens agent view",
+        "false: Claude Code turns the shortcut off; in a session you attached to from agent view, ← on an empty prompt still detaches"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "managedMcpServers",
+      "anchor": "managedmcpservers",
+      "topic": "MCP",
+      "scope": "Managed",
+      "scopeNote": "Claude Code drops the key with a warning in user, project, and local settings, and doesn't read it in the Claude Desktop app's Code tab on a third-party deployment or in the app's Cowork sessions, where Claude Desktop supplies and locks those sessions' MCP servers itself.",
+      "summary": "Provide remote MCP servers to every user alongside the ones they add",
+      "type": "object keyed by server name. Each entry has the .mcp.json shape for an http or sse server: a required https:// url, and optionally headers, oauth, and the other HTTP and SSE options. Claude Code drops entries that fail validation, and What an entry can contain lists the conditions",
+      "default": "unset, so managed settings provide no servers",
+      "merge": "map"
+    },
+    {
+      "key": "managedSourcesBehavior",
+      "anchor": "managedsourcesbehavior",
+      "topic": "Enterprise and managed settings",
+      "scope": "Managed",
+      "scopeNote": "Claude Code reads this key from the highest-priority source that carries either this key or a policy key, and ignores this key in every source ranked lower, so a lower source can't opt itself into combining with the source above it. Neither the Windows HKCU registry nor parent settings from an embedding host take part in the merge.",
+      "summary": "Compose every managed source you deploy instead of using the highest-priority one alone",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"first-wins\": the highest-priority source that carries a policy key supplies the policy, and lower sources contribute only the keys Claude Code reads from every admin source",
+        "\"merge\": every admin source you deliver contributes its keys, combined by the rules below"
+      ],
+      "default": "\"first-wins\"",
+      "merge": "replace"
+    },
+    {
+      "key": "maxEffortLevel",
+      "anchor": "maxeffortlevel",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "Deploy it in managed settings to enforce it for an organization. When several scopes set a cap, the lowest applies, so a cap set in one scope can't be raised from another",
+      "summary": "Cap the effort level for every model or per model, on every provider",
+      "type": "string, one of \"low\", \"medium\", \"high\", \"xhigh\", or \"max\". A \"max\" value sets no cap",
+      "default": "unset, so no cap applies",
+      "merge": "replace"
+    },
+    {
+      "key": "maxProseWidth",
+      "anchor": "maxprosewidth",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Cap how wide the prose in Claude's responses runs in a wide terminal",
+      "type": "number of terminal columns, a whole number, minimum 40. Claude Code ignores any other value",
+      "default": "unset, so prose wraps at the terminal edge",
+      "merge": "replace"
+    },
+    {
+      "key": "minimumVersion",
+      "anchor": "minimumversion",
+      "topic": "Updates and versioning",
+      "scope": "Any file",
+      "scopeNote": "Set it in managed settings to pin an organization-wide minimum that user and project settings can't lower.",
+      "summary": "Keep auto-updates from installing anything below a version",
+      "type": "string, a version number such as \"2.1.100\"; a value that isn't a valid version is ignored",
+      "default": "unset, so updates can install any version the channel offers",
+      "merge": "replace"
+    },
+    {
+      "key": "model",
+      "anchor": "model",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Change the model Claude Code starts with",
+      "type": "string, a model alias or full model ID",
+      "default": "unset, so Claude Code uses your account's default model",
+      "overrideFlags": [
+        "--model"
+      ],
+      "overrideEnv": [
+        "ANTHROPIC_MODEL"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "modelOverrides",
+      "anchor": "modeloverrides",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Map model IDs to your provider's IDs, such as Bedrock ARNs",
+      "type": "object mapping model ID to provider model ID",
+      "default": "unset",
+      "merge": "map"
+    },
+    {
+      "key": "modelPicker",
+      "anchor": "modelpicker",
+      "topic": "Model and responses",
+      "scope": "User or managed",
+      "scopeNote": "Claude Code reads the key from managed settings, --settings, and user settings, and ignores it in project and local settings so a repository you clone can't relabel the picker. The highest of those three that sets the key supplies the whole lineup, and Claude Code never combines lineups from two sources.",
+      "summary": "Choose which models the /model picker lists, in your own order and with your own labels",
+      "type": "object with an options array of rows and an optional replaceBuiltInOptions Boolean",
+      "default": "unset, so the picker shows the built-in lineup",
+      "merge": "undocumented"
+    },
+    {
+      "key": "modelPricing",
+      "anchor": "modelpricing",
+      "topic": "Model and responses",
+      "scope": "Managed",
+      "scopeNote": "Deploy the key through server-managed settings, an MDM policy, a managed-settings.json file, or a policy helper. Claude Code ignores it in user, project, and local settings, in --settings, and on Windows in the user-writable HKCU registry. With server-managed settings, each session reports costs at list price until that session's settings fetch has confirmed the setting. A host application that embeds Claude Code and sets CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST can supply a table of its own through the SDK managedSettings option, which Claude Code uses only when no managed source sets the key and only in Claude Code v2.1.246 or later.",
+      "summary": "Report spend at your organization's contracted rates instead of list price",
+      "type": "object with an optional multiplier and an optional overrides map",
+      "default": "unset, so Claude Code reports list price unless a host application supplies a table",
+      "merge": "undocumented"
+    },
+    {
+      "key": "modelSettings",
+      "anchor": "modelsettings",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Keep a saved effort level or auto-compact window per model, or cap one model's effort",
+      "type": "object mapping a model name to an object with any of these fields:",
+      "typeValues": [
+        "effortLevel: one of \"low\", \"medium\", \"high\", or \"xhigh\"",
+        "maxEffortLevel: the highest effort level the model may run at",
+        "autoCompactWindow: a number of tokens from 100000 to 1000000, or \"auto\" for the window tuned for the model. /autocompact saves here. For that model, the value takes precedence over a top-level autoCompactWindow in the same settings file. Requires Claude Code v2.1.288 or later"
+      ],
+      "default": "unset",
+      "merge": "map"
+    },
+    {
+      "key": "otelHeadersHelper",
+      "anchor": "otelheadershelper",
+      "topic": "Authentication and providers",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Generate rotating OpenTelemetry headers with your own command",
+      "type": "string, an executable path or a shell command line",
+      "default": "unset, so Claude Code adds no helper-generated headers",
+      "merge": "replace"
+    },
+    {
+      "key": "outputStyle",
+      "anchor": "outputstyle",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Change Claude's role, tone, and output format with an output style",
+      "type": "string, the name of a built-in or custom output style",
+      "default": "unset, so Claude Code uses the default style",
+      "merge": "replace"
+    },
+    {
+      "key": "parentSettingsBehavior",
+      "anchor": "parentsettingsbehavior",
+      "topic": "Enterprise and managed settings",
+      "scope": "Managed",
+      "scopeNote": "Claude Code reads it from the highest-priority admin-controlled managed source.",
+      "summary": "Apply or drop restrictions an SDK or IDE host passes when you deploy managed settings",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"first-wins\": Claude Code drops the host-supplied settings when an admin-deployed managed tier is present",
+        "\"merge\": Claude Code applies the host-supplied settings under the admin tier through a restrictive-only filter"
+      ],
+      "default": "\"first-wins\"",
+      "merge": "replace"
+    },
+    {
+      "key": "permissionExplainerEnabled",
+      "anchor": "permissionexplainerenabled",
+      "topic": "Global config settings",
+      "scope": "Global config",
+      "scopeNote": "On v2.1.256 and earlier.",
+      "summary": "Removed in v2.1.257, together with the Ctrl+E command explanation on shell permission prompts",
+      "type": "Boolean",
+      "default": "true",
+      "merge": "replace",
+      "removed": "v2.1.257"
+    },
+    {
+      "key": "permissions",
+      "anchor": "permissions",
+      "topic": "Permission settings",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Set allow, ask, and deny rules and the starting permission mode",
+      "type": "object with allow, ask, deny, additionalDirectories, blockReadsOutsideWorkingDirectories, defaultMode, disableBypassPermissionsMode, and disableAutoMode",
+      "default": "unset",
+      "merge": "undocumented"
+    },
+    {
+      "key": "permissions.additionalDirectories",
+      "anchor": "permissions-additionaldirectories",
+      "topic": "Permission settings",
+      "scope": "Any file",
+      "scopeNote": "with limits on the sandbox write access that project and local entries give",
+      "summary": "Give Claude file access to directories outside the current one",
+      "type": "array of directory paths",
+      "default": "unset",
+      "overrideFlags": [
+        "--add-dir"
+      ],
+      "merge": "list"
+    },
+    {
+      "key": "permissions.allow",
+      "anchor": "permissions-allow",
+      "topic": "Permission settings",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Approve listed tool uses without a prompt",
+      "type": "array of permission rule strings",
+      "default": "unset",
+      "overrideFlags": [
+        "--allowedTools"
+      ],
+      "merge": "list"
+    },
+    {
+      "key": "permissions.ask",
+      "anchor": "permissions-ask",
+      "topic": "Permission settings",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Always prompt before listed tool uses",
+      "type": "array of permission rule strings",
+      "default": "unset",
+      "merge": "list"
+    },
+    {
+      "key": "permissions.blockReadsOutsideWorkingDirectories",
+      "anchor": "permissions-blockreadsoutsideworkingdirectories",
+      "topic": "Permission settings",
+      "scope": "Any file",
+      "scopeNote": "A true in any file applies, so a repository can turn the block on for itself but can't lift yours.",
+      "summary": "Make the file tools refuse reads outside the working directories in every permission mode",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude's file tools refuse reads outside the working directories",
+        "false: the same as unset; the block still applies if another file sets true"
+      ],
+      "default": "unset, so reads outside the working directories follow your permission mode",
+      "merge": "replace"
+    },
+    {
+      "key": "permissions.defaultMode",
+      "anchor": "permissions-defaultmode",
+      "topic": "Permission settings",
+      "scope": "Any file",
+      "scopeNote": "auto and bypassPermissions don't take effect from project or local settings, so set them in ~/.claude/settings.json instead. Before v2.1.257, bypassPermissions took effect from any file. For conversations the VS Code extension starts, Claude Code reads only user, managed, and --settings values.",
+      "summary": "Set the permission mode new sessions start in",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"default\": Claude Code runs only reads without asking",
+        "\"acceptEdits\": Claude Code also runs file edits and common filesystem commands such as mkdir and mv without asking",
+        "\"plan\": Claude Code reads and plans but blocks edits until you approve a plan",
+        "\"auto\": Claude Code runs without routine prompts; before actions such as shell commands and network requests run, a background classifier checks that they align with your request",
+        "\"dontAsk\": Claude Code auto-denies every call that would otherwise prompt; file reads inside your working directories, other actions that need no approval, and pre-approved tools still run, apart from reads from network paths",
+        "\"bypassPermissions\": Claude Code runs everything without asking",
+        "\"manual\": an alias for \"default\""
+      ],
+      "default": "unset",
+      "overrideFlags": [
+        "--permission-mode",
+        "--dangerously-skip-permissions"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "permissions.deny",
+      "anchor": "permissions-deny",
+      "topic": "Permission settings",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Block listed tool uses, including reads of files that hold secrets",
+      "type": "array of permission rule strings",
+      "default": "unset",
+      "overrideFlags": [
+        "--disallowedTools"
+      ],
+      "merge": "list"
+    },
+    {
+      "key": "permissions.disableBypassPermissionsMode",
+      "anchor": "permissions-disablebypasspermissionsmode",
+      "topic": "Permission settings",
+      "scope": "Any file",
+      "scopeNote": "Typically set in managed settings to enforce organizational policy.",
+      "summary": "Prevent anyone from entering bypassPermissions mode",
+      "type": "the string \"disable\"",
+      "default": "unset",
+      "overrideFlags": [
+        "--dangerously-skip-permissions"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "plansDirectory",
+      "anchor": "plansdirectory",
+      "topic": "Memory and context",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Choose where plan mode writes plan files",
+      "type": "string, a path relative to the project root",
+      "default": "unset, so Claude Code uses ~/.claude/plans",
+      "merge": "replace"
+    },
+    {
+      "key": "pluginConfigs",
+      "anchor": "pluginconfigs",
+      "topic": "Plugins and skills",
+      "scope": "User or managed",
+      "scopeNote": "",
+      "summary": "Store the answers you gave a plugin's configuration dialog",
+      "type": "object mapping a plugin ID to an object with an options field, mapping each option name to a string, number, Boolean, or array of strings, and an optional mcpServers field holding per-server user configuration values in the same shape",
+      "default": "unset",
+      "merge": "map"
+    },
+    {
+      "key": "pluginSuggestionMarketplaces",
+      "anchor": "pluginsuggestionmarketplaces",
+      "topic": "Plugins and skills",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Choose which marketplaces can surface plugin install suggestions in /plugin",
+      "type": "array of marketplace names",
+      "default": "unset, so no marketplace-declared suggestions surface",
+      "merge": "list"
+    },
+    {
+      "key": "pluginTrustMessage",
+      "anchor": "plugintrustmessage",
+      "topic": "Plugins and skills",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Add your own text to the plugin trust warning",
+      "type": "string",
+      "default": "unset, so Claude Code shows the standard warning alone",
+      "merge": "replace"
+    },
+    {
+      "key": "policyHelper",
+      "anchor": "policyhelper",
+      "topic": "Enterprise and managed settings",
+      "scope": "Managed",
+      "scopeNote": "Read from the macOS plist, the Windows HKLM registry, or the managed settings file. Claude Code reads the key from the highest-priority managed source that carries a policy key and runs the helper only when that source is one of those three; it ignores the key in server-managed settings, the HKCU registry, and host-supplied parent settings.",
+      "summary": "Run an executable that computes managed settings at startup",
+      "type": "object with path, timeoutMs, and refreshIntervalMs",
+      "default": "unset, so no helper runs",
+      "merge": "undocumented"
+    },
+    {
+      "key": "policyHelper.path",
+      "anchor": "policyhelper-path",
+      "topic": "Enterprise and managed settings",
+      "scope": "Managed",
+      "scopeNote": "Read from the macOS plist, the Windows HKLM registry, or the managed settings file, wherever policyHelper is read.",
+      "summary": "Name the helper executable Claude Code runs",
+      "type": "string, an absolute path in normalized form, without . or .. segments; on Windows, a drive-letter or UNC path that ends in .exe",
+      "default": "none; required when policyHelper is set",
+      "merge": "replace"
+    },
+    {
+      "key": "policyHelper.refreshIntervalMs",
+      "anchor": "policyhelper-refreshintervalms",
+      "topic": "Enterprise and managed settings",
+      "scope": "Managed",
+      "scopeNote": "Read from the macOS plist, the Windows HKLM registry, or the managed settings file, wherever policyHelper is read.",
+      "summary": "Re-run the helper in the background on an interval",
+      "type": "integer, milliseconds: 0 to disable refresh, otherwise at least 60000",
+      "default": "unset, so Claude Code runs the helper once at startup",
+      "merge": "replace"
+    },
+    {
+      "key": "policyHelper.timeoutMs",
+      "anchor": "policyhelper-timeoutms",
+      "topic": "Enterprise and managed settings",
+      "scope": "Managed",
+      "scopeNote": "Read from the macOS plist, the Windows HKLM registry, or the managed settings file, wherever policyHelper is read.",
+      "summary": "Set how long Claude Code waits for the helper",
+      "type": "integer, milliseconds, minimum 1000",
+      "default": "10000",
+      "merge": "replace"
+    },
+    {
+      "key": "preferredNotifChannel",
+      "anchor": "preferrednotifchannel",
+      "topic": "Remote, desktop, and notifications",
+      "scope": "Any file",
+      "scopeNote": "Claude Code also reads a value left in ~/.claude.json by older versions.",
+      "summary": "Choose a terminal bell or desktop notification for task completion",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"auto\": Claude Code sends a desktop notification in iTerm2, Ghostty, and Kitty, rings the bell in Terminal.app only when its audible bell is off, and does nothing elsewhere",
+        "\"terminal_bell\": Claude Code rings the bell character in any terminal",
+        "\"iterm2\": Claude Code sends an iTerm2 desktop notification",
+        "\"iterm2_with_bell\": Claude Code sends an iTerm2 desktop notification and rings the bell",
+        "\"kitty\": Claude Code sends a Kitty desktop notification",
+        "\"ghostty\": Claude Code sends a Ghostty desktop notification",
+        "\"notifications_disabled\": Claude Code sends no notification"
+      ],
+      "default": "\"auto\"",
+      "merge": "replace"
+    },
+    {
+      "key": "prefersReducedMotion",
+      "anchor": "prefersreducedmotion",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Reduce or turn off spinner, shimmer, and flash animations",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code reduces or turns off interface animations such as the spinner, shimmer, and flash effects",
+        "false: the same as unset; Claude Code shows its animations"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "prependPlugins",
+      "anchor": "prependplugins",
+      "topic": "Plugins and skills",
+      "scope": "User or managed",
+      "scopeNote": "Claude Code reads the key from managed settings. It reads the key from user settings only on a machine with no managed settings, for a user who isn't signed in with a Team or Enterprise plan. It ignores the key in project and local settings and in a --settings file.",
+      "summary": "Run your organization's mods before every mod a user installs",
+      "type": "array of plugin-name@marketplace-name strings",
+      "default": "unset",
+      "merge": "list"
+    },
+    {
+      "key": "processWrapper",
+      "anchor": "processwrapper",
+      "topic": "Agents, sessions, and worktrees",
+      "scope": "User or managed",
+      "scopeNote": "",
+      "summary": "Run Claude Code's background processes through a corporate launcher on macOS and Linux",
+      "type": "string, the launcher command as an argv prefix, such as an absolute path with optional arguments",
+      "default": "unset, so background processes start unwrapped",
+      "overrideEnv": [
+        "CLAUDE_CODE_PROCESS_WRAPPER"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "promptCacheTtl",
+      "anchor": "promptcachettl",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Choose the prompt cache lifetime for the main conversation",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"5m\": the cache holds for five minutes",
+        "\"1h\": the cache holds for an hour"
+      ],
+      "default": "unset, so each main-conversation request gets its default lifetime",
+      "overrideEnv": [
+        "FORCE_PROMPT_CACHING_5M",
+        "CLAUDE_CODE_PROMPT_CACHE_TTL",
+        "ENABLE_PROMPT_CACHING_1H"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "promptSuggestionEnabled",
+      "anchor": "promptsuggestionenabled",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Hide the grayed-out prompt suggestions in the input box",
+      "type": "Boolean",
+      "typeValues": [
+        "true: you see prompt suggestions in your prompt input",
+        "false: Claude Code hides prompt suggestions"
+      ],
+      "default": "true",
+      "overrideEnv": [
+        "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "prStatusFooterEnabled",
+      "anchor": "prstatusfooterenabled",
+      "topic": "Global config settings",
+      "scope": "Global config",
+      "scopeNote": "",
+      "summary": "Turn off the prompt footer's PR review status badge and the pull request check behind it",
+      "type": "Boolean",
+      "typeValues": [
+        "true: the footer shows the badge under the conditions in PR review status",
+        "false: Claude Code skips the footer's pull request and merge request check and doesn't show that badge. A session you attached to from agent view can still show a plain link to a pull request linked to it"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "prUrlTemplate",
+      "anchor": "prurltemplate",
+      "topic": "Git and attribution",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Point PR links at an internal code-review tool instead of github.com",
+      "type": "string, a URL template using any of the five placeholders",
+      "default": "unset",
+      "merge": "replace"
+    },
+    {
+      "key": "remote.defaultEnvironmentId",
+      "anchor": "remote-defaultenvironmentid",
+      "topic": "Remote, desktop, and notifications",
+      "scope": "Any file",
+      "scopeNote": "For a self-hosted environment ID, user or managed settings, or the --settings flag only.",
+      "summary": "Pick the default cloud environment for claude --cloud; a self-hosted ccpool_ ID is read only from user and managed settings and --settings",
+      "type": "string, an environment ID such as env_... or ccpool_...",
+      "default": "unset, so Claude Code uses the Anthropic-hosted environment when your list has one, and otherwise the first environment in your list that isn't a Remote Control bridge environment, or the first environment when every one is a bridge environment",
+      "overrideFlags": [
+        "--environment"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "remoteControlAtStartup",
+      "anchor": "remotecontrolatstartup",
+      "topic": "Remote, desktop, and notifications",
+      "scope": "Any file",
+      "scopeNote": "Claude Code also reads a value left in ~/.claude.json by older versions.",
+      "summary": "Connect Remote Control automatically when a session starts",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code connects Remote Control automatically when each interactive session starts",
+        "false: Claude Code waits for /remote-control"
+      ],
+      "default": "unset, so the auto-connect default applies",
+      "overrideFlags": [
+        "--remote-control"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "requiredMaximumVersion",
+      "anchor": "requiredmaximumversion",
+      "topic": "Updates and versioning",
+      "scope": "Managed",
+      "scopeNote": "Claude Code gives no warning when it ignores the key elsewhere.",
+      "summary": "Refuse to start on a version newer than your organization allows",
+      "type": "string, a version number such as \"2.1.150\"; a value that isn't a valid version is ignored",
+      "default": "unset, so no ceiling applies",
+      "merge": "replace"
+    },
+    {
+      "key": "requiredMinimumVersion",
+      "anchor": "requiredminimumversion",
+      "topic": "Updates and versioning",
+      "scope": "Managed",
+      "scopeNote": "Claude Code gives no warning when it ignores the key elsewhere.",
+      "summary": "Refuse to start on a version older than your organization requires",
+      "type": "string, a version number such as \"2.1.150\"; a value that isn't a valid version is ignored",
+      "default": "unset, so no floor applies",
+      "merge": "replace"
+    },
+    {
+      "key": "respectGitignore",
+      "anchor": "respectgitignore",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "When no settings file sets it, Claude Code falls back to respectGitignore in ~/.claude.json, which the /config toggle writes.",
+      "summary": "Keep gitignored files out of the @ file picker",
+      "type": "Boolean",
+      "typeValues": [
+        "true: the @ file picker leaves out files that match .gitignore patterns",
+        "false: the @ file picker includes files that match .gitignore patterns"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "respondToBashCommands",
+      "anchor": "respondtobashcommands",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Stop Claude from responding after a ! shell command runs",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code adds the command's output to the conversation and Claude replies to it",
+        "false: Claude Code adds the output to context without a reply"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox",
+      "anchor": "sandbox",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Isolate Bash commands from your filesystem and network on macOS, Linux, and WSL2",
+      "type": "object with enabled, failIfUnavailable, autoAllowBashIfSandboxed, excludedCommands, allowUnsandboxedCommands, enableWeakerNestedSandbox, enableWeakerNetworkIsolation, allowAppleEvents, bwrapPath, socatPath, ignoreViolations, and ripgrep, plus the filesystem, network, and credentials objects",
+      "default": "unset, so Claude Code runs commands without a sandbox",
+      "merge": "undocumented"
+    },
+    {
+      "key": "sandbox.allowAppleEvents",
+      "anchor": "sandbox-allowappleevents",
+      "topic": "Sandbox settings",
+      "scope": "User or managed",
+      "scopeNote": "",
+      "summary": "Let sandboxed commands send Apple Events on macOS",
+      "type": "Boolean",
+      "typeValues": [
+        "true: sandboxed commands on macOS can send Apple Events",
+        "false: sandboxed commands on macOS can't send Apple Events, so open and osascript fail with error -600"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.allowUnsandboxedCommands",
+      "anchor": "sandbox-allowunsandboxedcommands",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "with a limit on project and local settings",
+      "summary": "Let Claude retry a blocked command outside the sandbox, or forbid it",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude can retry a command outside the sandbox with the dangerouslyDisableSandbox parameter after the sandbox blocks it",
+        "false: Claude Code ignores that parameter, so while the sandbox is running, commands Claude runs are sandboxed unless they match an excludedCommands entry"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.autoAllowBashIfSandboxed",
+      "anchor": "sandbox-autoallowbashifsandboxed",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Run sandboxed commands without a permission prompt",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code runs sandboxed Bash commands without a permission prompt, except in the cases that Auto-allow mode describes; CLAUDE_CODE_SUBPROCESS_ENV_SCRUB turns auto-allow off",
+        "false: sandboxed commands go through the regular permission flow, so your allow rules and permission mode decide. The /sandbox Mode tab calls this regular permissions mode"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.bwrapPath",
+      "anchor": "sandbox-bwrappath",
+      "topic": "Sandbox settings",
+      "scope": "Managed",
+      "scopeNote": "Claude Code reads it only from managed settings so that a user, project, or local file can't point the sandbox at a different binary.",
+      "summary": "Point the sandbox at a bubblewrap binary outside PATH",
+      "type": "string, an absolute path; Claude Code drops a relative path and falls back to PATH lookup",
+      "default": "unset, so Claude Code finds bwrap on PATH",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.credentials",
+      "anchor": "sandbox-credentials",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "Claude Code honors mask entries, allowPlaintextInject, awsPairs, and sigv4 only from user settings, managed settings, and the --settings flag.",
+      "summary": "Hide or mask credential files and variables inside the sandbox",
+      "type": "object with files, envVars, allowPlaintextInject, awsPairs, and sigv4",
+      "default": "unset, so no credentials are protected",
+      "merge": "undocumented"
+    },
+    {
+      "key": "sandbox.credentials.allowPlaintextInject",
+      "anchor": "sandbox-credentials-allowplaintextinject",
+      "topic": "Sandbox settings",
+      "scope": "User or managed",
+      "scopeNote": "",
+      "summary": "Let masked credentials reach plain HTTP services on trusted test networks",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code allows mask substitution on plain HTTP requests as well as TLS-terminated HTTPS",
+        "false: Claude Code allows mask substitution only on TLS-terminated HTTPS"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.credentials.awsPairs",
+      "anchor": "sandbox-credentials-awspairs",
+      "topic": "Sandbox settings",
+      "scope": "User or managed",
+      "scopeNote": "",
+      "summary": "Link custom-named AWS key variables into one credential for re-signing",
+      "type": "array of objects, each with accessKeyIdVar, secretAccessKeyVar, and optionally sessionTokenVar, naming sandbox.credentials.envVars entries",
+      "default": "unset, so only the conventional trio is paired",
+      "merge": "list"
+    },
+    {
+      "key": "sandbox.credentials.envVars",
+      "anchor": "sandbox-credentials-envvars",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "Claude Code drops mask entries from project .claude/settings.json and local .claude/settings.local.json.",
+      "summary": "Unset or mask an environment variable inside the sandbox",
+      "type": "array of objects, each with name and a mode of \"deny\" or \"mask\", plus the optional mask fields for environment variables",
+      "default": "unset, so no environment variables are protected",
+      "merge": "list"
+    },
+    {
+      "key": "sandbox.credentials.files",
+      "anchor": "sandbox-credentials-files",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "Claude Code drops mask entries from project .claude/settings.json and local .claude/settings.local.json.",
+      "summary": "Block or mask reads of a credential file inside the sandbox",
+      "type": "array of objects, each with path and a mode of \"deny\" or \"mask\", plus the optional mask fields for files",
+      "default": "unset, so no credential files are protected",
+      "merge": "list"
+    },
+    {
+      "key": "sandbox.credentials.sigv4",
+      "anchor": "sandbox-credentials-sigv4",
+      "topic": "Sandbox settings",
+      "scope": "User or managed",
+      "scopeNote": "",
+      "summary": "Choose whether streaming, presigned, or SigV4A AWS requests fail or pass through",
+      "type": "object with streaming, presigned, and sigv4a, each one of:",
+      "typeValues": [
+        "\"deny\": the proxy fails the request",
+        "\"passthrough\": the proxy forwards the request signed with the masked placeholder, so the tool receives AWS's own rejection"
+      ],
+      "default": "unset, so every form is \"deny\"",
+      "merge": "undocumented"
+    },
+    {
+      "key": "sandbox.enabled",
+      "anchor": "sandbox-enabled",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "with limits on project and local settings",
+      "summary": "Turn on Bash sandboxing on macOS, Linux, and WSL2",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code sandboxes Bash commands",
+        "false: Bash commands run unsandboxed"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.enableWeakerNestedSandbox",
+      "anchor": "sandbox-enableweakernestedsandbox",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "with limits on project and local settings",
+      "summary": "Run the Linux sandbox inside an unprivileged container",
+      "type": "Boolean",
+      "typeValues": [
+        "true: the inner sandbox bind-mounts the container's existing /proc instead of mounting a fresh one",
+        "false: the sandbox mounts a fresh /proc, which doesn't work in an unprivileged Docker container"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.enableWeakerNetworkIsolation",
+      "anchor": "sandbox-enableweakernetworkisolation",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "with limits on project and local settings",
+      "summary": "Let gh, gcloud, and terraform verify TLS behind a MITM proxy inside the sandbox on macOS",
+      "type": "Boolean",
+      "typeValues": [
+        "true: sandboxed commands on macOS can reach com.apple.trustd.agent",
+        "false: sandboxed commands on macOS can't reach the system TLS trust service"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.excludedCommands",
+      "anchor": "sandbox-excludedcommands",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "with limits on project and local settings",
+      "summary": "Name commands Claude Code can run outside the sandbox",
+      "type": "array of command patterns",
+      "default": "unset, so no command is excluded",
+      "merge": "list"
+    },
+    {
+      "key": "sandbox.failIfUnavailable",
+      "anchor": "sandbox-failifunavailable",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "with limits on project and local settings",
+      "summary": "Refuse to start when the sandbox can't, instead of running unsandboxed",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code exits with an error at startup when sandbox.enabled is true but the sandbox can't start",
+        "false: Claude Code runs commands unsandboxed when the sandbox can't start"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.filesystem",
+      "anchor": "sandbox-filesystem",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Control which paths sandboxed commands can read and write",
+      "type": "object with allowWrite, denyWrite, denyRead, and allowRead arrays, plus the allowManagedReadPathsOnly and disabled Booleans",
+      "default": "unset, so the default read and write boundaries apply",
+      "merge": "undocumented"
+    },
+    {
+      "key": "sandbox.filesystem.allowManagedReadPathsOnly",
+      "anchor": "sandbox-filesystem-allowmanagedreadpathsonly",
+      "topic": "Sandbox settings",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Stop developers from re-opening read paths your organization blocked",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code honors only the allowRead entries from managed settings",
+        "false: allowRead entries from other settings files can merge in"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.filesystem.allowRead",
+      "anchor": "sandbox-filesystem-allowread",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "with limits on project and local settings",
+      "summary": "Re-open reading inside a region denyRead blocks",
+      "type": "array of path strings, using the sandbox path prefixes",
+      "default": "unset",
+      "merge": "list"
+    },
+    {
+      "key": "sandbox.filesystem.allowWrite",
+      "anchor": "sandbox-filesystem-allowwrite",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "with limits on project and local settings",
+      "summary": "Add paths sandboxed commands can write to",
+      "type": "array of path strings, using the sandbox path prefixes",
+      "default": "unset, so sandboxed commands can write to the working directory, the per-user temp directory, directories you've added with --add-dir or /add-dir, and directories in permissions.additionalDirectories",
+      "merge": "list"
+    },
+    {
+      "key": "sandbox.filesystem.denyRead",
+      "anchor": "sandbox-filesystem-denyread",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Block sandboxed commands from reading specific paths",
+      "type": "array of path strings, using the sandbox path prefixes",
+      "default": "unset, so sandboxed commands keep the default read access, which includes credential files such as ~/.aws/credentials",
+      "merge": "list"
+    },
+    {
+      "key": "sandbox.filesystem.denyWrite",
+      "anchor": "sandbox-filesystem-denywrite",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Block sandboxed commands from writing to specific paths",
+      "type": "array of path strings, using the sandbox path prefixes",
+      "default": "unset",
+      "merge": "list"
+    },
+    {
+      "key": "sandbox.filesystem.disabled",
+      "anchor": "sandbox-filesystem-disabled",
+      "topic": "Sandbox settings",
+      "scope": "User or managed",
+      "scopeNote": "When managed settings configure sandbox.filesystem at all, or list a sandbox.credentials.files entry with \"mode\": \"deny\", only managed settings can set it.",
+      "summary": "Turn off filesystem isolation while keeping network isolation",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code skips filesystem isolation and keeps network isolation",
+        "false: filesystem isolation stays on"
+      ],
+      "default": "false, so filesystem isolation stays on",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.ignoreViolations",
+      "anchor": "sandbox-ignoreviolations",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "with limits on project and local settings",
+      "summary": "Silence violation reports for paths a command is expected to probe",
+      "type": "object mapping a command substring to an array of violation substrings, usually paths",
+      "default": "unset, so every violation is reported",
+      "merge": "map"
+    },
+    {
+      "key": "sandbox.network",
+      "anchor": "sandbox-network",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "strictAllowlist, allowManagedDomainsOnly, and tlsTerminate are read from fewer sources, as their entries say.",
+      "summary": "Control which hosts, ports, and sockets sandboxed commands reach",
+      "type": "object with the sub-keys below",
+      "default": "unset, so no domains are pre-allowed and your permission mode decides what happens to each new host",
+      "merge": "undocumented"
+    },
+    {
+      "key": "sandbox.network.allowAllUnixSockets",
+      "anchor": "sandbox-network-allowallunixsockets",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "with limits on project and local settings",
+      "summary": "Let sandboxed commands connect to every Unix socket",
+      "type": "Boolean",
+      "typeValues": [
+        "true: sandboxed commands can connect to every Unix socket",
+        "false: the sandbox blocks Unix-socket connections: on macOS except the paths in allowUnixSockets, and on Linux and WSL2 through the seccomp filter when it's present"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.network.allowedDomains",
+      "anchor": "sandbox-network-alloweddomains",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "with limits on project and local settings. Only managed settings when allowManagedDomainsOnly is set.",
+      "summary": "Pre-allow domains so sandboxed commands don't prompt for them",
+      "type": "array of strings, each a domain, wildcard pattern, or IP literal, with an optional :port suffix",
+      "default": "unset, so your permission mode decides what happens to each new host",
+      "merge": "list"
+    },
+    {
+      "key": "sandbox.network.allowLocalBinding",
+      "anchor": "sandbox-network-allowlocalbinding",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "with limits on project and local settings",
+      "summary": "Let sandboxed commands listen on network ports and connect to localhost on macOS",
+      "type": "Boolean",
+      "typeValues": [
+        "true: sandboxed commands on macOS can listen on any local address and connect to any port on localhost",
+        "false: sandboxed commands on macOS can't listen on a port or connect directly to servers on localhost"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.network.allowMachLookup",
+      "anchor": "sandbox-network-allowmachlookup",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "with limits on project and local settings",
+      "summary": "Let macOS sandboxed tools like the iOS Simulator or Playwright reach their XPC services",
+      "type": "array of strings, each a service name; a single trailing * matches a prefix, and \"*\" alone matches every service",
+      "default": "unset",
+      "merge": "list"
+    },
+    {
+      "key": "sandbox.network.allowManagedDomainsOnly",
+      "anchor": "sandbox-network-allowmanageddomainsonly",
+      "topic": "Sandbox settings",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Lock the network allowlist to managed settings",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code honors only allowedDomains and WebFetch(domain:...) allow rules from managed settings and blocks a non-allowed domain instead of prompting",
+        "false: domains from other settings files can merge into the allowlist"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.network.allowUnixSockets",
+      "anchor": "sandbox-network-allowunixsockets",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "with limits on project and local settings",
+      "summary": "List Unix socket paths sandboxed commands can use on macOS",
+      "type": "array of strings, each a socket path",
+      "default": "unset, so the macOS sandbox blocks every Unix socket",
+      "merge": "list"
+    },
+    {
+      "key": "sandbox.network.deniedDomains",
+      "anchor": "sandbox-network-denieddomains",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Block domains for sandboxed commands, even inside an allowed wildcard",
+      "type": "array of strings, each a domain, wildcard pattern, or IP literal, with an optional :port suffix",
+      "default": "unset",
+      "merge": "list"
+    },
+    {
+      "key": "sandbox.network.httpProxyPort",
+      "anchor": "sandbox-network-httpproxyport",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "unless other sandbox settings limit which files can set a port",
+      "summary": "Route sandbox HTTP traffic through your own proxy",
+      "type": "number, a local TCP port",
+      "default": "unset, so Claude Code runs its own proxy",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.network.socksProxyPort",
+      "anchor": "sandbox-network-socksproxyport",
+      "topic": "Sandbox settings",
+      "scope": "Any file",
+      "scopeNote": "unless other sandbox settings limit which files can set a port",
+      "summary": "Route sandbox SOCKS traffic through your own proxy",
+      "type": "number, a local TCP port",
+      "default": "unset, so Claude Code runs its own proxy",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.network.strictAllowlist",
+      "anchor": "sandbox-network-strictallowlist",
+      "topic": "Sandbox settings",
+      "scope": "User or managed",
+      "scopeNote": "A repository can't turn it on or off.",
+      "summary": "Deny hosts outside the allowlist instead of prompting",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code denies sandboxed commands access to hosts outside the allowlist",
+        "false: unless another trusted settings file sets true, Claude Code decides a host outside the allowlist by permission mode instead of denying it outright: in auto mode it checks the host against the command's per-command allowed domains, in dontAsk mode it denies, in bypassPermissions mode and in interactive terminal plan-mode sessions where bypass is available it allows, and otherwise it asks you"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "sandbox.network.tlsTerminate",
+      "anchor": "sandbox-network-tlsterminate",
+      "topic": "Sandbox settings",
+      "scope": "User or managed",
+      "scopeNote": "A repository can't switch it on or supply a certificate authority.",
+      "summary": "Have the sandbox proxy terminate TLS so it can read HTTPS requests",
+      "type": "object with optional caCertPath and caKeyPath strings, each a file path",
+      "default": "unset, so the proxy doesn't terminate or inspect TLS",
+      "merge": "undocumented"
+    },
+    {
+      "key": "sandbox.ripgrep",
+      "anchor": "sandbox-ripgrep",
+      "topic": "Sandbox settings",
+      "scope": "User or managed",
+      "scopeNote": "",
+      "summary": "Use your own ripgrep binary inside the sandbox",
+      "type": "object with command, the path to the ripgrep binary, and optional args, an array of arguments to prepend",
+      "default": "unset, so the sandbox uses the same ripgrep binary as Claude Code. That is the bundled binary unless you set USE_BUILTIN_RIPGREP to 0",
+      "merge": "undocumented"
+    },
+    {
+      "key": "sandbox.socatPath",
+      "anchor": "sandbox-socatpath",
+      "topic": "Sandbox settings",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Point the sandbox proxy at a socat binary outside PATH",
+      "type": "string, an absolute path; Claude Code drops a relative path and falls back to PATH lookup",
+      "default": "unset, so Claude Code finds socat on PATH",
+      "merge": "replace"
+    },
+    {
+      "key": "showClearContextOnPlanAccept",
+      "anchor": "showclearcontextonplanaccept",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Show a \"clear context\" option on the plan accept screen",
+      "type": "Boolean",
+      "typeValues": [
+        "true: the plan approval menu gets a first option, Yes, clear context and …, that approves the plan and clears the conversation context",
+        "false: the plan approval menu shows no clear-context option"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "showThinkingSummaries",
+      "anchor": "showthinkingsummaries",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "See summaries of Claude's thinking instead of a collapsed stub",
+      "type": "Boolean",
+      "typeValues": [
+        "true: you see full thinking summaries when you expand thinking with Ctrl+O",
+        "false: the Anthropic API redacts thinking blocks and Claude Code shows a collapsed stub"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "showTurnDuration",
+      "anchor": "showturnduration",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "A value in ~/.claude.json from an older version applies when no settings file sets it.",
+      "summary": "Hide the \"Cooked for\" duration after each response",
+      "type": "Boolean",
+      "typeValues": [
+        "true: you see the turn duration message after each response",
+        "false: Claude Code hides the turn duration message"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "skillListingBudgetFraction",
+      "anchor": "skilllistingbudgetfraction",
+      "topic": "Memory and context",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Reserve more or less context for the skill listing",
+      "type": "number, a fraction greater than 0 and at most 1",
+      "default": "0.01, which reserves 1% of the context window",
+      "merge": "replace"
+    },
+    {
+      "key": "skillListingMaxDescChars",
+      "anchor": "skilllistingmaxdescchars",
+      "topic": "Memory and context",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Cap each skill's description length in the skill listing",
+      "type": "number of characters, a positive integer",
+      "default": "1536",
+      "merge": "replace"
+    },
+    {
+      "key": "skillOverrides",
+      "anchor": "skilloverrides",
+      "topic": "Plugins and skills",
+      "scope": "Any file",
+      "scopeNote": "The /skills menu writes to .claude/settings.local.json.",
+      "summary": "Hide or collapse a skill without editing its SKILL.md",
+      "type": "object mapping skill name to one of:",
+      "typeValues": [
+        "\"on\": Claude sees the skill and you can type /name",
+        "\"name-only\": Claude sees the skill by name without its description",
+        "\"user-invocable-only\": Claude doesn't see the skill, but you can still type /name",
+        "\"off\": Claude doesn't see the skill and /name is hidden from autocomplete"
+      ],
+      "default": "unset, so every skill is \"on\"",
+      "merge": "map"
+    },
+    {
+      "key": "skipAutoPermissionPrompt",
+      "anchor": "skipautopermissionprompt",
+      "topic": "Permission settings",
+      "scope": "User or managed",
+      "scopeNote": "A repository can't set it for you.",
+      "summary": "Skip the one-time notice Claude Code shows when you first enter auto mode yourself rather than through the built-in default",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code skips the notice",
+        "false: the same as unset; the notice appears once unless another of these files sets true"
+      ],
+      "default": "unset, so the notice appears once",
+      "merge": "replace"
+    },
+    {
+      "key": "skipDangerousModePermissionPrompt",
+      "anchor": "skipdangerousmodepermissionprompt",
+      "topic": "Permission settings",
+      "scope": "User, local, or managed",
+      "scopeNote": "An untrusted repository can't skip the dialog for you.",
+      "summary": "Skip the confirmation dialog before bypassPermissions mode",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code skips the confirmation dialog before a session enters bypassPermissions mode",
+        "false: the same as unset; the dialog appears unless another of these files sets true"
+      ],
+      "default": "unset, so the dialog appears",
+      "merge": "replace"
+    },
+    {
+      "key": "skipWebFetchPreflight",
+      "anchor": "skipwebfetchpreflight",
+      "topic": "Privacy and telemetry",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Skip the WebFetch hostname check when Anthropic is unreachable",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code skips the WebFetch domain safety check",
+        "false: the check runs before the first fetch to each hostname in a session, and again for a hostname whose earlier check was blocked or failed"
+      ],
+      "default": "unset, so the check runs before the first fetch to each hostname in a session",
+      "merge": "replace"
+    },
+    {
+      "key": "spellcheck",
+      "anchor": "spellcheck",
+      "topic": "Interface and terminal",
+      "scope": "User or managed",
+      "scopeNote": "The block from the highest tier that sets it applies as a whole.",
+      "summary": "Underline misspelled words in the prompt input with a spell checker you install",
+      "type": "object with enabled (Boolean), checker (\"aspell\", \"hunspell\", \"ispell\", or \"auto\"), language (string, passed to the checker as its dictionary name), and color (string, a terminal color name, #rrggbb, rgb(r,g,b), ansi256(n), or ansi:<name>)",
+      "default": "unset, so spell checking is off; checker defaults to \"auto\", the first of the three found on PATH; language defaults to the checker's own dictionary; color defaults to the theme's error color",
+      "merge": "undocumented"
+    },
+    {
+      "key": "spinnerTipsEnabled",
+      "anchor": "spinnertipsenabled",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Hide tips in the spinner while Claude works",
+      "type": "Boolean",
+      "typeValues": [
+        "true: you see tips in the spinner while Claude is working",
+        "false: Claude Code hides spinner tips"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "spinnerTipsOverride",
+      "anchor": "spinnertipsoverride",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "Claude Code honors tip objects, tipsFile, label, and excludeDefault from user settings, the --settings flag, and managed settings; from project and local settings it reads plain string tips only.",
+      "summary": "Add your own tips to the spinner rotation, or replace the built-in tips",
+      "type": "object with tips, tipsFile, label, and excludeDefault fields, each optional",
+      "default": "unset, so Claude Code shows only the built-in tips",
+      "merge": "undocumented"
+    },
+    {
+      "key": "spinnerVerbs",
+      "anchor": "spinnerverbs",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Add or replace the verbs shown while a turn runs",
+      "type": "object with a verbs array of strings and mode, one of:",
+      "typeValues": [
+        "\"append\": Claude Code adds your verbs to the built-in set",
+        "\"replace\": Claude Code shows only your verbs"
+      ],
+      "default": "unset, so Claude Code uses the built-in verbs",
+      "merge": "undocumented"
+    },
+    {
+      "key": "sshConfigs",
+      "anchor": "sshconfigs",
+      "topic": "Remote, desktop, and notifications",
+      "scope": "User or managed",
+      "scopeNote": "The desktop app reads this key. By default, it reads managed connections from one managed source.",
+      "summary": "Add SSH connections to the Desktop environment dropdown",
+      "type": "array of objects, each with required id, name, and sshHost and optional sshPort and sshIdentityFile",
+      "default": "unset",
+      "merge": "list"
+    },
+    {
+      "key": "sshHostAllowlist",
+      "anchor": "sshhostallowlist",
+      "topic": "Remote, desktop, and notifications",
+      "scope": "Managed",
+      "scopeNote": "By default, Desktop reads the key from one managed source.",
+      "summary": "Limit which hosts Desktop SSH sessions can reach",
+      "type": "array of hostname patterns",
+      "default": "unset, so any host is allowed",
+      "merge": "list"
+    },
+    {
+      "key": "statusLine",
+      "anchor": "statusline",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "When allowManagedHooksOnly is on, or disableAllHooks is set outside managed settings, only the managed settings value runs.",
+      "summary": "Run your own command to render a status line below the prompt",
+      "type": "object with type set to \"command\" and a command string, plus optional padding as a number of characters, refreshInterval as a number of seconds, minimum 1, and hideVimModeIndicator as a Boolean",
+      "default": "unset, so no status line",
+      "merge": "undocumented"
+    },
+    {
+      "key": "strictKnownMarketplaces",
+      "anchor": "strictknownmarketplaces",
+      "topic": "Plugins and skills",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Allowlist the marketplace sources users can add and install from",
+      "type": "array of marketplace source objects; see Allowed source types",
+      "default": "unset, so users can add any marketplace. An empty array is a complete lockdown that blocks every marketplace source, including the official Anthropic marketplace",
+      "merge": "list"
+    },
+    {
+      "key": "strictPluginOnlyCustomization",
+      "anchor": "strictpluginonlycustomization",
+      "topic": "Plugins and skills",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Block skills, agents, hooks, and MCP servers from user and project sources",
+      "type": "true to lock all four kinds of customization, or an array naming the kinds to lock, from \"skills\", \"agents\", \"hooks\", and \"mcp\"",
+      "default": "unset, so nothing is locked",
+      "merge": "replace"
+    },
+    {
+      "key": "strictPluginOnlyCustomization.agents",
+      "anchor": "strictpluginonlycustomization-agents",
+      "topic": "Plugins and skills",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Lock agents to plugin and managed sources",
+      "type": "the string \"agents\" in the strictPluginOnlyCustomization array",
+      "default": "not locked",
+      "merge": "replace"
+    },
+    {
+      "key": "strictPluginOnlyCustomization.hooks",
+      "anchor": "strictpluginonlycustomization-hooks",
+      "topic": "Plugins and skills",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Lock hooks to plugin and managed sources",
+      "type": "the string \"hooks\" in the strictPluginOnlyCustomization array",
+      "default": "not locked",
+      "merge": "replace"
+    },
+    {
+      "key": "strictPluginOnlyCustomization.mcp",
+      "anchor": "strictpluginonlycustomization-mcp",
+      "topic": "Plugins and skills",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Lock MCP servers to plugin and managed sources",
+      "type": "the string \"mcp\" in the strictPluginOnlyCustomization array",
+      "default": "not locked",
+      "merge": "replace"
+    },
+    {
+      "key": "strictPluginOnlyCustomization.skills",
+      "anchor": "strictpluginonlycustomization-skills",
+      "topic": "Plugins and skills",
+      "scope": "Managed",
+      "scopeNote": "",
+      "summary": "Lock skills to plugin and managed sources",
+      "type": "the string \"skills\" in the strictPluginOnlyCustomization array",
+      "default": "not locked",
+      "merge": "replace"
+    },
+    {
+      "key": "subagentPromptCacheTtl",
+      "anchor": "subagentpromptcachettl",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Choose the prompt cache lifetime for subagents and other requests outside the main conversation",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"5m\": the cache holds for five minutes",
+        "\"1h\": the cache holds for an hour"
+      ],
+      "default": "unset, so each of these requests gets its default lifetime",
+      "overrideEnv": [
+        "FORCE_PROMPT_CACHING_5M",
+        "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL",
+        "ENABLE_PROMPT_CACHING_1H"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "subagentStatusLine",
+      "anchor": "subagentstatusline",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "When allowManagedHooksOnly is on, or disableAllHooks is set outside managed settings, only the managed settings value runs.",
+      "summary": "Rewrite rows in the subagent task display with your own command",
+      "type": "object with type set to \"command\" and a command string",
+      "default": "unset, so Claude Code renders the default rows",
+      "merge": "undocumented"
+    },
+    {
+      "key": "switchModelsOnFlag",
+      "anchor": "switchmodelsonflag",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "Appears in /config as Switch models when a message is flagged, with the options Switch automatically and Ask each time.",
+      "summary": "Switch models automatically or pause when a safety classifier flags a request",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code switches to the fallback model and continues",
+        "false: in an interactive session Claude Code pauses so you can choose between switching and editing the prompt; where no dialog can show, such as a -p run, the flagged request ends as an error"
+      ],
+      "default": "unset. Claude Code switches automatically, though it may ask first in an interactive session",
+      "merge": "replace"
+    },
+    {
+      "key": "syncClaudeAiPlugins",
+      "anchor": "syncclaudeaiplugins",
+      "topic": "Plugins and skills",
+      "scope": "User, local, or managed",
+      "scopeNote": "and files passed with --settings. A repository can't turn it off for you.",
+      "summary": "Stop loading the plugins enabled on your claude.ai account and stop downloading new ones",
+      "type": "Boolean",
+      "typeValues": [
+        "false: Claude Code stops downloading synced plugins and stops loading the ones already in ~/.claude/plugins/synced/. In user or managed settings, it also moves them to ~/.claude/plugins/.trash/",
+        "true: the same as unset"
+      ],
+      "default": "unset, so sessions signed in with your claude.ai account sync your plugins",
+      "merge": "replace"
+    },
+    {
+      "key": "syncClaudeAiSkills",
+      "anchor": "syncclaudeaiskills",
+      "topic": "Plugins and skills",
+      "scope": "User, local, or managed",
+      "scopeNote": "and files passed with --settings. A repository can't turn it off for you.",
+      "summary": "Stop loading the skills enabled on your claude.ai account and stop downloading new ones",
+      "type": "Boolean",
+      "typeValues": [
+        "false: Claude Code stops downloading synced skills and stops loading the ones already in ~/.claude/skills/synced/. In user or managed settings, it also moves them to ~/.claude/skills/.trash/",
+        "true: the same as unset"
+      ],
+      "default": "unset, so sessions signed in with your claude.ai account sync your skills",
+      "merge": "replace"
+    },
+    {
+      "key": "syntaxHighlightingDisabled",
+      "anchor": "syntaxhighlightingdisabled",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn off syntax highlighting in diffs and code blocks",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code turns off syntax highlighting in diffs, code blocks, and file previews",
+        "false: Claude Code highlights syntax"
+      ],
+      "default": "false",
+      "merge": "replace"
+    },
+    {
+      "key": "taskOutputMaxChars",
+      "anchor": "taskoutputmaxchars",
+      "topic": "Memory and context",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Removed in v2.1.277, together with the TaskOutput tool it sized",
+      "type": "",
+      "default": "",
+      "merge": "replace",
+      "removed": "v2.1.277"
+    },
+    {
+      "key": "teammateDefaultModel",
+      "anchor": "teammatedefaultmodel",
+      "topic": "Global config settings",
+      "scope": "Global config",
+      "scopeNote": "On v2.1.233 and earlier.",
+      "summary": "Removed in v2.1.234; see Specify teammates and models for how Claude Code picks a teammate's model",
+      "type": "string, a model alias or full model ID, or null",
+      "default": "unset",
+      "merge": "replace",
+      "removed": "v2.1.234"
+    },
+    {
+      "key": "teammateMode",
+      "anchor": "teammatemode",
+      "topic": "Agents, sessions, and worktrees",
+      "scope": "Any file",
+      "scopeNote": "Claude Code also reads a value left in ~/.claude.json by older versions.",
+      "summary": "Choose how agent team teammates display",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"in-process\": teammates run inside your main terminal pane",
+        "\"auto\": split panes when you're running inside tmux, or inside iTerm2 with it2 on your PATH or tmux installed; in-process otherwise",
+        "\"tmux\": split panes using tmux or iTerm2, detected from your terminal",
+        "\"iterm2\": iTerm2 native split panes through the it2 CLI"
+      ],
+      "default": "\"in-process\"",
+      "overrideFlags": [
+        "--teammate-mode"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "terminalProgressBarEnabled",
+      "anchor": "terminalprogressbarenabled",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "A value in ~/.claude.json from an older version applies when no settings file sets it.",
+      "summary": "Hide the terminal progress bar in terminals that support it",
+      "type": "Boolean",
+      "typeValues": [
+        "true: you see the terminal progress bar in terminals that support it",
+        "false: Claude Code hides the terminal progress bar"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "terminalTitleFromRename",
+      "anchor": "terminaltitlefromrename",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Stop /rename and --name from changing the terminal tab title",
+      "type": "Boolean",
+      "typeValues": [
+        "true: the terminal tab title shows the session name you set",
+        "false: the tab keeps the title Claude Code generates from your conversation"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "theme",
+      "anchor": "theme",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "A value in ~/.claude.json from an older version applies when no settings file sets it.",
+      "summary": "Pick the interface color theme, built-in or custom",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"auto\": matches your terminal's light or dark background",
+        "\"dark\": the dark theme",
+        "\"light\": the light theme",
+        "\"dark-daltonized\": the dark theme with colorblind-friendly colors",
+        "\"light-daltonized\": the light theme with colorblind-friendly colors",
+        "\"dark-ansi\": the dark theme using only your terminal's ANSI color palette",
+        "\"light-ansi\": the light theme using only your terminal's ANSI color palette",
+        "\"custom:<slug>\" or \"custom:<plugin-name>:<slug>\": a custom theme from ~/.claude/themes/ or a plugin"
+      ],
+      "default": "\"dark\"",
+      "merge": "replace"
+    },
+    {
+      "key": "timeFormat",
+      "anchor": "timeformat",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Show the times in the interface on a 12-hour or 24-hour clock, in UTC, or with a strftime pattern",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"auto\": the same as unset; each time keeps its built-in format, which follows your locale on the turn duration message",
+        "\"12-hour\": a 12-hour clock",
+        "\"24-hour\": a 24-hour clock",
+        "\"24-hour-utc\": a 24-hour clock in UTC with Z after the minutes, such as 18:05Z; Claude Code ignores timeZone for this preset",
+        "A strftime pattern such as \"%H:%M\": Claude Code writes each time with the pattern. Any value that contains a % is a pattern, and any other value outside the presets counts as \"auto\""
+      ],
+      "default": "\"auto\"",
+      "merge": "replace"
+    },
+    {
+      "key": "timeZone",
+      "anchor": "timezone",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Show the times in the interface in a time zone other than your system's",
+      "type": "string, an IANA time zone name. When Claude Code doesn't recognize the name, it uses your system time zone",
+      "default": "unset, so times show in your system time zone",
+      "merge": "replace"
+    },
+    {
+      "key": "tui",
+      "anchor": "tui",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Choose the fullscreen or classic terminal renderer",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"default\": the classic main-screen renderer",
+        "\"fullscreen\": the flicker-free alt-screen renderer with virtualized scrollback"
+      ],
+      "default": "unset, so Claude Code picks the renderer for you",
+      "overrideEnv": [
+        "CLAUDE_CODE_NO_FLICKER",
+        "CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "ultracode",
+      "anchor": "ultracode",
+      "topic": "Model and responses",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Have Claude plan a workflow for each substantive task without being asked",
+      "type": "Boolean",
+      "typeValues": [
+        "true: sessions start with ultracode on when dynamic workflows are enabled for you and your model supports xhigh",
+        "false: sessions start with ultracode off"
+      ],
+      "default": "unset, so ultracode is off",
+      "overrideFlags": [
+        "--effort"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "useAutoModeDuringPlan",
+      "anchor": "useautomodeduringplan",
+      "topic": "Permission settings",
+      "scope": "User, local, or managed",
+      "scopeNote": "A repository can't turn it off for you.",
+      "summary": "Let the auto mode classifier review shell commands in plan mode; set false to get prompts instead",
+      "type": "Boolean",
+      "typeValues": [
+        "true: the same as unset; when auto mode is available, the classifier reviews each shell command during planning instead of prompting you for it, except critical-path removals. A false in any of these files still turns it off",
+        "false: you get a permission prompt for every command outside the built-in read-only set"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "verbose",
+      "anchor": "verbose",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "A value in ~/.claude.json from an older version applies when no settings file sets it.",
+      "summary": "Show full tool output instead of truncated summaries; viewMode takes precedence when both are set",
+      "type": "Boolean",
+      "typeValues": [
+        "true: you see full tool output",
+        "false: you see truncated summaries of tool output"
+      ],
+      "default": "false",
+      "overrideFlags": [
+        "--verbose"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "viewMode",
+      "anchor": "viewmode",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Start every session in default, verbose, or focus view",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"default\": the normal transcript with truncated tool output",
+        "\"verbose\": the transcript with full tool output",
+        "\"focus\": only your last prompt, a one-line summary of tool calls with edit diffstats, and the final response. Focus view needs the fullscreen renderer"
+      ],
+      "default": "unset, so the verbose setting and your last /focus choice apply",
+      "overrideFlags": [
+        "--verbose"
+      ],
+      "merge": "replace"
+    },
+    {
+      "key": "vimInsertModeRemaps",
+      "anchor": "viminsertmoderemaps",
+      "topic": "Interface and terminal",
+      "scope": "User or managed",
+      "scopeNote": "A repository can't remap your keystrokes.",
+      "summary": "Map a two-key INSERT-mode sequence such as jj to Escape",
+      "type": "object mapping a two-character sequence to \"<Esc>\"",
+      "default": "unset",
+      "merge": "map"
+    },
+    {
+      "key": "voice",
+      "anchor": "voice",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn on voice dictation and pick hold or tap mode",
+      "type": "object with enabled as a Boolean, autoSubmit as a Boolean that applies in hold mode only, and mode, one of:",
+      "typeValues": [
+        "\"hold\": you hold the dictation key while speaking and release it to stop",
+        "\"tap\": you tap the key once to start recording and again to send"
+      ],
+      "default": "unset, so dictation is off; when enabled is true and mode is unset, Claude Code uses \"hold\"",
+      "merge": "undocumented"
+    },
+    {
+      "key": "voiceEnabled",
+      "anchor": "voiceenabled",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn on voice dictation with the older single-key form",
+      "type": "Boolean",
+      "typeValues": [
+        "true: voice dictation is on when you're logged in with a claude.ai account and your organization's policy allows voice, unless voice.enabled is set",
+        "false: voice dictation is off, unless voice.enabled is set"
+      ],
+      "default": "unset",
+      "merge": "replace"
+    },
+    {
+      "key": "wheelScrollAccelerationEnabled",
+      "anchor": "wheelscrollaccelerationenabled",
+      "topic": "Interface and terminal",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Turn off mouse-wheel acceleration in fullscreen rendering",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code accelerates mouse-wheel scroll speed during fast scrolls",
+        "false: Claude Code scrolls at a constant rate per wheel notch"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "workflowKeywordTriggerEnabled",
+      "anchor": "workflowkeywordtriggerenabled",
+      "topic": "Hooks and automation",
+      "scope": "Any file",
+      "scopeNote": "Appears in /config as Ultracode keyword trigger.",
+      "summary": "Let the word ultracode in a prompt start a workflow; set false to type it without starting one",
+      "type": "Boolean",
+      "typeValues": [
+        "true: typing ultracode in a prompt triggers a dynamic workflow",
+        "false: you can type the word without triggering one"
+      ],
+      "default": "true",
+      "merge": "replace"
+    },
+    {
+      "key": "workflowSizeGuideline",
+      "anchor": "workflowsizeguideline",
+      "topic": "Hooks and automation",
+      "scope": "Any file",
+      "scopeNote": "A value there takes precedence over the Dynamic workflow size choice in /config, which Claude Code stores in ~/.claude.json, and Claude Code hides that row while a settings file sets the key.",
+      "summary": "Set the agent count Claude aims for in dynamic workflows",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"unrestricted\": no guideline, so Claude sizes the workflow to the task",
+        "\"small\": Claude aims for fewer than 5 agents",
+        "\"medium\": Claude aims for fewer than 10 agents",
+        "\"large\": Claude aims for fewer than 50 agents"
+      ],
+      "default": "\"medium\", or \"small\" when you're signed in on a Pro plan with Claude Code v2.1.271 or later",
+      "merge": "replace"
+    },
+    {
+      "key": "worktree",
+      "anchor": "worktree",
+      "topic": "Agents, sessions, and worktrees",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Configure how Claude Code creates git worktrees",
+      "type": "object with baseRef, symlinkDirectories, sparsePaths, and bgIsolation",
+      "default": "unset",
+      "merge": "undocumented"
+    },
+    {
+      "key": "worktree.baseRef",
+      "anchor": "worktree-baseref",
+      "topic": "Agents, sessions, and worktrees",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Branch new worktrees from the remote default branch or your local HEAD",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"fresh\": new worktrees branch from origin/<default-branch>",
+        "\"head\": new worktrees branch from your current local HEAD, including unpushed commits"
+      ],
+      "default": "\"fresh\"",
+      "merge": "replace"
+    },
+    {
+      "key": "worktree.bgIsolation",
+      "anchor": "worktree-bgisolation",
+      "topic": "Agents, sessions, and worktrees",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Let background sessions edit the working copy without a worktree",
+      "type": "string, one of:",
+      "typeValues": [
+        "\"worktree\": Claude Code blocks Edit and Write in the main checkout until the session calls EnterWorktree",
+        "\"none\": background jobs edit the working copy directly"
+      ],
+      "default": "\"worktree\"",
+      "merge": "replace"
+    },
+    {
+      "key": "worktree.location",
+      "anchor": "worktree-location",
+      "topic": "Agents, sessions, and worktrees",
+      "scope": "User",
+      "scopeNote": "in ~/.claude/settings.json on the remote machine",
+      "summary": "Choose where Desktop SSH sessions create their worktrees on a remote machine",
+      "type": "string, an absolute path or one that starts with ~/",
+      "default": "unset, so worktrees go inside the project",
+      "merge": "replace"
+    },
+    {
+      "key": "worktree.sparsePaths",
+      "anchor": "worktree-sparsepaths",
+      "topic": "Agents, sessions, and worktrees",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Check out only the directories you need in each worktree",
+      "type": "array of strings, directory paths relative to the repository root",
+      "default": "unset, so each worktree checks out the whole tree",
+      "merge": "list"
+    },
+    {
+      "key": "worktree.symlinkDirectories",
+      "anchor": "worktree-symlinkdirectories",
+      "topic": "Agents, sessions, and worktrees",
+      "scope": "Any file",
+      "scopeNote": "",
+      "summary": "Symlink large directories into each worktree instead of duplicating them",
+      "type": "array of strings, directory paths relative to the repository root",
+      "default": "unset, so Claude Code symlinks no directories",
+      "merge": "list"
+    },
+    {
+      "key": "wslInheritsWindowsSettings",
+      "anchor": "wslinheritswindowssettings",
+      "topic": "Enterprise and managed settings",
+      "scope": "Managed",
+      "scopeNote": "In an admin-controlled Windows source.",
+      "summary": "Have WSL read managed settings from the Windows policy chain",
+      "type": "Boolean",
+      "typeValues": [
+        "true: Claude Code on WSL reads managed settings from the Windows policy chain, and reads /etc/claude-code only when no Windows admin document is present",
+        "false: WSL reads only /etc/claude-code"
+      ],
+      "default": "false, so WSL reads only /etc/claude-code",
+      "merge": "replace"
+    }
+  ]
+}
