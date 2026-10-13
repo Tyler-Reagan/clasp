@@ -102,13 +102,13 @@ func TestGroupKeysExitZoom(t *testing.T) {
 	}
 }
 
-func TestCruftTabEmpty(t *testing.T) {
+func TestCruftTabNoReport(t *testing.T) {
 	m := navModel(100, tabCruft)
 	if n := m.listLen(); n != 0 {
 		t.Errorf("cruft listLen = %d", n)
 	}
 	_ = m.detailContent()
-	if v := plain(m.View()); !strings.Contains(v, "Cruft scan arrives") || !strings.Contains(v, "in the next step") {
+	if v := plain(m.View()); !strings.Contains(v, "press r to scan") {
 		t.Error("empty-state message missing")
 	}
 }

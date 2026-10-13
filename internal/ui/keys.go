@@ -39,7 +39,8 @@ type keyMap struct {
 	Project key.Binding // Settings: open the project picker
 	Source  key.Binding // Skills/Plugins/MCP: cycle the CLI/Desktop source filter
 	Delete  key.Binding
-	Trash   key.Binding // Skills/Plugins/MCP: move an item's leftover copies to the Trash
+	Trash   key.Binding // Skills/Plugins/MCP: move an item's leftover copies to the Trash; Cruft: trash a dead project's transcripts
+	Remove  key.Binding // Cruft: remove a merged, clean worktree
 	Refresh key.Binding
 	Help    key.Binding
 	Quit    key.Binding
@@ -67,6 +68,7 @@ func defaultKeys() keyMap {
 		Toggle:         key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "toggle")),
 		Delete:         key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
 		Trash:          key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "trash leftovers")),
+		Remove:         key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "remove worktree")),
 		ShowAll:        key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "all keys")),
 		Project:        key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "project")),
 		Source:         key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "source")),
@@ -99,7 +101,10 @@ func (c contextKeys) ShortHelp() []key.Binding {
 	}
 	// Delete is enabled only on the Memory tab and ShowAll/Project only on
 	// Settings, so help.Model surfaces each only where it applies.
-	return []key.Binding{k.Up, k.Down, k.Top, k.End, k.NextTab, k.NextGroup, k.Zoom, k.Delete, k.Trash, k.ShowAll, k.Project, k.Source, k.Refresh, k.Help, k.Quit}
+	// Tab-specific actions come right after the cursor keys: at 80 columns the
+	// hint is truncated from the right, and an action the user can take here
+	// matters more than navigation they already know.
+	return []key.Binding{k.Up, k.Down, k.Delete, k.Trash, k.Remove, k.ShowAll, k.Project, k.Source, k.Zoom, k.NextTab, k.NextGroup, k.Top, k.End, k.Refresh, k.Help, k.Quit}
 }
 
 // FullHelp is the ? overlay layout — column groups.
@@ -120,6 +125,6 @@ func (c contextKeys) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.Top, k.End},
 		{k.NextTab, k.PrevTab, k.NextGroup, k.Zoom},
 		{k.ScrollDown, k.ScrollUp, k.ScrollPageDown, k.ScrollPageUp},
-		{k.Toggle, k.Delete, k.Trash, k.ShowAll, k.Project, k.Source, k.Refresh, k.Help, k.Quit},
+		{k.Toggle, k.Delete, k.Trash, k.Remove, k.ShowAll, k.Project, k.Source, k.Refresh, k.Help, k.Quit},
 	}
 }

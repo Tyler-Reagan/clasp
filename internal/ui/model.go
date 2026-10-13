@@ -15,6 +15,7 @@ import (
 	glamourstyles "github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/tylerreagan/clasp/internal/cruft"
 	"github.com/tylerreagan/clasp/internal/inventory"
 	"github.com/tylerreagan/clasp/internal/state"
 )
@@ -168,6 +169,14 @@ type Model struct {
 	// pendingTrash is the sibling modal for moving an inventory item's
 	// leftover copies to the Trash; same priority and y/anything-else rules.
 	pendingTrash *trashTarget
+
+	// Cruft tab: the last scan (nil until one finishes), whether one is in
+	// flight, a generation that drops stale results, and the removal awaiting
+	// y/n.
+	cruft         *cruft.Report
+	cruftScanning bool
+	cruftGen      int
+	pendingCruft  *cruftTarget
 }
 
 // New loads state and builds the model. projects, if non-nil, receives the
@@ -278,6 +287,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			clearStatusAfter(4*time.Second),
 		)
 
+	case cruftScanMsg:
+		if msg.gen != m.cruftGen {
+			return m, nil
+		}
+		m.cruft, m.cruftScanning = msg.report, false
+		m.clampCursors()
+		m.detail.SetContent(m.detailContent())
+		return m, nil
+
+	case cruftActionMsg:
+		if msg.err != nil {
+			m.statusMsg = styleRed.Render("✗ " + msg.err.Error())
+		} else {
+			m.statusMsg = styleGreen.Render("✓ " + msg.what)
+		}
+		return m, tea.Batch(m.startCruftScan(), clearStatusAfter(4*time.Second))
+
 	case clearStatusMsg:
 		m.statusMsg = ""
 		return m, nil
@@ -302,11 +328,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateConfirmTrash(msg)
 		}
 
+		if m.pendingCruft != nil {
+			return m.updateConfirmCruft(msg)
+		}
+
 		// Global keys: handled regardless of focus.
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
 		case key.Matches(msg, m.keys.Refresh):
+			if m.tab == tabCruft {
+				return m, tea.Batch(func() tea.Msg { return RefreshMsg{} }, m.startCruftScan())
+			}
 			return m, func() tea.Msg { return RefreshMsg{} }
 		case key.Matches(msg, m.keys.Help):
 			m.showHelp = true
@@ -431,10 +464,18 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.detail.SetContent(m.detailContent())
 		return m, nil
 	case key.Matches(msg, m.keys.Trash):
+		if m.tab == tabCruft {
+			return m.trashCruftSelected()
+		}
 		if !invTab(m.tab) {
 			return m, nil
 		}
 		return m.trashSelected()
+	case key.Matches(msg, m.keys.Remove):
+		if m.tab != tabCruft {
+			return m, nil
+		}
+		return m.removeCruftSelected()
 	case key.Matches(msg, m.keys.ShowAll):
 		m.toggleSettingsAll()
 		m.detail.GotoTop()
@@ -582,7 +623,12 @@ func (m Model) afterTabSwitch() (tea.Model, tea.Cmd) {
 	m.refreshBindings()
 	m.detail.GotoTop()
 	m.detail.SetContent(m.detailContent())
-	return m, func() tea.Msg { return RefreshMsg{} }
+	cmds := []tea.Cmd{func() tea.Msg { return RefreshMsg{} }}
+	if m.tab == tabCruft && m.cruft == nil && !m.cruftScanning {
+		cmds = append(cmds, m.startCruftScan())
+		m.detail.SetContent(m.detailContent())
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // refreshBindings updates per-binding Enabled state based on the current
@@ -596,7 +642,14 @@ func (m *Model) refreshBindings() {
 	m.keys.ShowAll.SetEnabled(settings)
 	m.keys.Project.SetEnabled(settings)
 	m.keys.Delete.SetEnabled(m.focus == focusList && m.tab == tabMemory)
-	m.keys.Trash.SetEnabled(m.focus == focusList && invTab(m.tab))
+	cruftTab := m.focus == focusList && m.tab == tabCruft
+	m.keys.Trash.SetEnabled(m.focus == focusList && invTab(m.tab) || cruftTab)
+	if m.tab == tabCruft {
+		m.keys.Trash.SetHelp("t", "trash transcripts")
+	} else {
+		m.keys.Trash.SetHelp("t", "trash leftovers")
+	}
+	m.keys.Remove.SetEnabled(cruftTab)
 	m.keys.Source.SetEnabled(m.focus == focusList && invTab(m.tab) && m.hasDesktop())
 }
 
@@ -812,10 +865,14 @@ func (m Model) renderStatus() string {
 		t := m.pendingTrash
 		right = styleYellow.Render(fmt.Sprintf("trash %s (%s)? ", t.dirs, humanSize(t.size))) +
 			stylePrimary.Render("y") + styleMuted.Render("/N")
+	} else if m.pendingCruft != nil {
+		right = m.cruftPrompt()
 	} else if m.statusMsg != "" {
 		right = m.statusMsg
 	} else if m.loadErr != nil {
 		right = styleRed.Render("⚠ " + m.loadErr.Error())
+	} else if m.tab == tabCruft && m.cruftScanning {
+		right = styleMuted.Render("scanning…")
 	} else {
 		right = m.invSummary(m.tab)
 	}
@@ -843,6 +900,9 @@ func (m Model) renderStatus() string {
 func (m Model) listRows() []rowItem { return m.rowsFor(m.tab) }
 
 func (m Model) rowsFor(t tab) []rowItem {
+	if t == tabCruft {
+		return m.cruftRows()
+	}
 	if m.st == nil {
 		return nil
 	}
@@ -876,21 +936,20 @@ func (m Model) rowsFor(t tab) []rowItem {
 			if t == "" {
 				t = "·"
 			}
-			rows = append(rows, rowItem{
+			row := rowItem{
 				ind:     styleMuted.Render(string([]rune(t)[0])),
 				indW:    1,
 				label:   name,
 				dataIdx: i,
-			})
+			}
+			if len(m.memoryIssuesFor(e.Project, e.File)) > 0 {
+				row.tail, row.tailW = " "+styleYellow.Render("⚠"), 2
+			}
+			rows = append(rows, row)
 		}
 		return rows
 	case tabSettings:
 		return m.settingsRows()
-	case tabCruft:
-		return []rowItem{
-			{isHeader: true, label: "· Cruft scan arrives", dataIdx: -1},
-			{isHeader: true, label: "  in the next step", dataIdx: -1},
-		}
 	}
 	return nil
 }
@@ -974,6 +1033,9 @@ func (m Model) selectedMemoryIdx() int {
 // ── detail content ────────────────────────────────────────────────────────────
 
 func (m Model) detailContent() string {
+	if m.tab == tabCruft {
+		return m.cruftDetail()
+	}
 	if m.st == nil {
 		return styleRed.Render("⚠ could not load ~/.claude state")
 	}
@@ -999,9 +1061,6 @@ func (m Model) detailContent() string {
 	case tabSkills, tabPlugins, tabMCP:
 		return m.invDetail(m.tab)
 
-	case tabCruft:
-		return ""
-
 	case tabMemory:
 		memIdx := m.selectedMemoryIdx()
 		if memIdx < 0 || memIdx >= len(m.st.Memory) {
@@ -1019,6 +1078,17 @@ func (m Model) detailContent() string {
 			kv("File", e.File),
 			kv("Project", projectLabel(e.Project)),
 		}, "\n")
+		if is := m.memoryIssuesFor(e.Project, e.File); len(is) > 0 {
+			lines := []string{header, "", styleYellow.Render("⚠ Cruft scan found")}
+			for _, i := range is {
+				txt := "· " + i.Kind.String()
+				if i.Detail != "" {
+					txt += ": " + i.Detail
+				}
+				lines = append(lines, noteLines(txt, m.detail.Width)...)
+			}
+			header = strings.Join(lines, "\n")
+		}
 		if e.Body == "" {
 			return header
 		}
