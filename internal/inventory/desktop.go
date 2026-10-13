@@ -97,15 +97,16 @@ func (s desktopSource) loadRPM(c *collector, sessions string) {
 				Enabled *bool  `json:"enabled"`
 			} `json:"plugins"`
 		}
-		_, err := readJSON(filepath.Join(rpm, "manifest.json"), &manifest)
+		found, err := readJSON(filepath.Join(rpm, "manifest.json"), &manifest)
 		c.err(err)
 		listed := map[string]int{}
 		for i, pl := range manifest.Plugins {
 			listed[pl.ID] = i
 		}
 		// A dir the manifest does not list is a leftover. With no manifest to
-		// go by, every dir stays active: never guess.
-		known := err == nil && len(manifest.Plugins) > 0
+		// go by, every dir stays active: never guess. One that parses with no
+		// plugins means the last one was uninstalled.
+		known := found && err == nil
 
 		dirs, err := subdirs(rpm)
 		c.err(err)

@@ -72,6 +72,7 @@ type trashTarget struct {
 	kind inventory.Kind
 	name string
 	n    int
+	dirs string // the directories that will move, e.g. "design~g1", so a skill row names its plugin
 	size int64
 }
 
@@ -222,6 +223,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = styleRed.Render("✗ " + msg.err.Error())
 		default:
 			s := styleGreen.Render(fmt.Sprintf("moved %d to the Trash", len(msg.moved)))
+			if len(msg.moved) == 0 {
+				s = styleYellow.Render("nothing moved")
+			}
 			if k := len(msg.refused); k > 0 {
 				paths := make([]string, 0, k)
 				for p := range msg.refused {
@@ -710,11 +714,7 @@ func (m Model) renderStatus() string {
 			stylePrimary.Render("y") + styleMuted.Render("/N")
 	} else if m.pendingTrash != nil {
 		t := m.pendingTrash
-		noun := "leftover"
-		if t.n != 1 {
-			noun = "leftovers"
-		}
-		right = styleYellow.Render(fmt.Sprintf("trash %d %s (%s)? ", t.n, noun, humanSize(t.size))) +
+		right = styleYellow.Render(fmt.Sprintf("trash %s (%s)? ", t.dirs, humanSize(t.size))) +
 			stylePrimary.Render("y") + styleMuted.Render("/N")
 	} else if m.statusMsg != "" {
 		right = m.statusMsg

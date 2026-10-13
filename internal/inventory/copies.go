@@ -77,14 +77,14 @@ func (c *collector) classify(cp *Copy) {
 			cp.Why = "not yet marked by Claude Code"
 		}
 		if len(cp.LivePIDs) > 0 {
-			cp.Why += "; " + inUseBy(cp.LivePIDs)
+			cp.Why += "; " + InUseBy(cp.LivePIDs)
 		}
 	case CopyLeftover:
 		switch {
 		case cp.Origin == OriginData:
 			cp.Why = "kept plugin data (claude plugin uninstall --keep-data)"
 		case len(cp.LivePIDs) > 0:
-			cp.Why = inUseBy(cp.LivePIDs)
+			cp.Why = InUseBy(cp.LivePIDs)
 		case cp.Origin == OriginRPM:
 			running, known := c.desktopRunning()
 			switch {
@@ -101,7 +101,8 @@ func (c *collector) classify(cp *Copy) {
 	}
 }
 
-func inUseBy(pids []int) string {
+// InUseBy is the reason given for a copy live sessions are using.
+func InUseBy(pids []int) string {
 	parts := make([]string, len(pids))
 	for i, p := range pids {
 		parts[i] = strconv.Itoa(p)
@@ -170,11 +171,7 @@ func (s cliSource) installedPlugins() (paths map[string]bool, ids map[string]boo
 // One that installed_plugins.json points at is active; any other is stale and
 // is left to Claude Code, whose sweep marks it with .orphaned_at and deletes
 // it after orphanGrace.
-func (s cliSource) loadCache(c *collector) {
-	installed, _, ok := s.installedPlugins()
-	if !ok {
-		return
-	}
+func (s cliSource) loadCache(c *collector, installed map[string]bool) {
 	root := filepath.Join(s.env.ClaudeDir, "plugins", "cache")
 	mkts, err := realSubdirs(root)
 	c.err(err)
@@ -208,11 +205,7 @@ func (s cliSource) loadCache(c *collector) {
 // "plugin@marketplace" maps to is kept data from an uninstall, shown as a
 // leftover that is never trashable. -inline dirs cannot be matched to an
 // install and are ignored.
-func (s cliSource) loadData(c *collector) {
-	_, ids, ok := s.installedPlugins()
-	if !ok {
-		return
-	}
+func (s cliSource) loadData(c *collector, ids map[string]bool) {
 	want := map[string]bool{}
 	for id := range ids {
 		if name, mkt, found := strings.Cut(id, "@"); found {

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -463,10 +464,11 @@ func humanSize(n int64) string {
 func distinctSize(cs []inventory.Copy) (n int, size int64) {
 	seen := map[string]bool{}
 	for _, c := range cs {
-		if seen[c.Path] {
+		p := filepath.Clean(c.Path) // the same key TrashLeftovers groups by
+		if seen[p] {
 			continue
 		}
-		seen[c.Path] = true
+		seen[p] = true
 		n++
 		size += c.Size
 	}
@@ -508,6 +510,22 @@ func copyLines(it *inventory.Item, w int) []string {
 	return lines
 }
 
+// trashDirs names the distinct directories t would move, cut to fit the
+// status bar. A skill or MCP row moves its whole plugin dir, so the prompt
+// names that dir rather than the row.
+func trashDirs(cs []inventory.Copy) string {
+	seen := map[string]bool{}
+	var names []string
+	for _, c := range cs {
+		p := filepath.Clean(c.Path)
+		if !seen[p] {
+			seen[p] = true
+			names = append(names, filepath.Base(p))
+		}
+	}
+	return truncate(strings.Join(names, ", "), 40)
+}
+
 // kindFor maps an inventory tab to its item kind.
 func kindFor(t tab) inventory.Kind {
 	switch t {
@@ -531,7 +549,7 @@ func (m Model) trashSelected() (Model, tea.Cmd) {
 		m.statusMsg = styleYellow.Render("nothing trashable here")
 		return m, clearStatusAfter(3 * time.Second)
 	}
-	m.pendingTrash = &trashTarget{kind: kindFor(m.tab), name: it.Name, n: n, size: size}
+	m.pendingTrash = &trashTarget{kind: kindFor(m.tab), name: it.Name, n: n, size: size, dirs: trashDirs(it.TrashableLeftovers())}
 	return m, nil
 }
 

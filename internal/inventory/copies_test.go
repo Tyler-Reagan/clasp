@@ -166,6 +166,7 @@ func TestSyncedLeftovers(t *testing.T) {
 		{"unreadable manifest", `{oops`, []string{"x", "x~g2"}, nil},
 		{"bare generation is 1", `{"plugins":[{"name":"x"}]}`, []string{"x"}, []string{"x~g2"}},
 		{"name not in manifest", `{"plugins":[{"name":"y"}]}`, nil, []string{"x", "x~g2"}},
+		{"last plugin removed", `{"plugins":[]}`, nil, []string{"x", "x~g2"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -288,6 +289,21 @@ func TestRPMNoManifestKeepsAllActive(t *testing.T) {
 	inv := f.load()
 	a := mustFind(t, inv.Plugins, "a")
 	if len(a.Installs) != 1 || len(a.Leftovers()) != 0 {
+		t.Errorf("a = %+v", a)
+	}
+}
+
+// Uninstalling the last Desktop plugin leaves a manifest with no plugins: its
+// dir is a leftover, not an install.
+func TestRPMEmptyManifestMakesLeftovers(t *testing.T) {
+	fakeProcs(t, nil)
+	fakeDesktop(t, false, true)
+	f := newFixture(t)
+	f.plugin(f.rpmDir("plugin_a"), plug{name: "a"})
+	f.write(filepath.Join(filepath.Dir(f.rpmDir("x")), "manifest.json"), `{"plugins":[]}`)
+	inv := f.load()
+	a := mustFind(t, inv.Plugins, "a")
+	if len(a.Installs) != 0 || len(a.TrashableLeftovers()) != 1 {
 		t.Errorf("a = %+v", a)
 	}
 }

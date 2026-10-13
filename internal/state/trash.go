@@ -193,7 +193,7 @@ func (g *trashGuard) check(path string, copies []inventory.Copy) string {
 	// (f) No live session has it in use, probed again right now: a session
 	// may have started since the inventory was read.
 	if pids := liveUsers(path); len(pids) > 0 {
-		return inUseReason(pids)
+		return inventory.InUseBy(pids)
 	}
 
 	// (g) Desktop rpm dirs only while Claude Desktop is known not to be
@@ -278,15 +278,4 @@ func within(path, dir string) bool {
 		return false
 	}
 	return rel == "." || rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-func inUseReason(pids []int) string {
-	parts := make([]string, len(pids))
-	for i, p := range pids {
-		parts[i] = fmt.Sprint(p)
-	}
-	if len(parts) == 1 {
-		return "in use by PID " + parts[0]
-	}
-	return "in use by PIDs " + strings.Join(parts, ", ")
 }

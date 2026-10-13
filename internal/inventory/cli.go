@@ -46,8 +46,10 @@ func (s cliSource) load(c *collector) {
 	s.loadPersonal(c)
 	s.loadMarketplace(c, settings.EnabledPlugins)
 	s.loadSynced(c, settings.EnabledPlugins)
-	s.loadCache(c)
-	s.loadData(c)
+	if paths, ids, ok := s.installedPlugins(); ok {
+		s.loadCache(c, paths)
+		s.loadData(c, ids)
+	}
 	loadStandaloneMCP(c, []mcpSource{
 		{settingsPath, settings.MCPServers},
 		{localPath, local.MCPServers},
@@ -170,8 +172,9 @@ func splitGeneration(dir string) (name string, gen int) {
 
 // syncedGenerations reads <acct>/manifest.json: the generation of each synced
 // plugin by name (absent means 1). known is false when the manifest is
-// missing, unreadable or lists nothing, and then no dir may be called a
-// leftover: never guess.
+// missing or unreadable, and then no dir may be called a leftover: never
+// guess. A manifest that parses with no plugins is known: every account
+// plugin was removed, so every dir is a leftover.
 func syncedGenerations(c *collector, acctDir string) (gens map[string]int, known bool) {
 	var m struct {
 		Plugins []struct {
@@ -181,7 +184,7 @@ func syncedGenerations(c *collector, acctDir string) (gens map[string]int, known
 	}
 	found, err := readJSON(filepath.Join(acctDir, "manifest.json"), &m)
 	c.err(err)
-	if !found || err != nil || len(m.Plugins) == 0 {
+	if !found || err != nil {
 		return nil, false
 	}
 	gens = map[string]int{}

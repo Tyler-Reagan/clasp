@@ -136,7 +136,7 @@ func TestTrashConfirmCancelAndYes(t *testing.T) {
 	if m.pendingTrash == nil {
 		t.Fatal("no pending trash")
 	}
-	if got := plain(m.renderStatus()); !strings.Contains(got, "trash 1 leftover (16K)? y/N") {
+	if got := plain(m.renderStatus()); !strings.Contains(got, "trash gone (16K)? y/N") {
 		t.Errorf("status = %q", got)
 	}
 	n, _ := key1(m, "n")

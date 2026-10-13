@@ -153,7 +153,7 @@ func TestSyncedPlugins(t *testing.T) {
 	})
 	f.plugin(f.syncedDir("off"), plug{name: "off", skills: map[string]string{"o": skillMD("o", "o")}})
 	// Files beside the plugin dirs are not plugins.
-	f.cli("plugins/synced/"+orgID+"_"+acctID+"/manifest.json", `{"plugins":[]}`)
+	f.cli("plugins/synced/"+orgID+"_"+acctID+"/manifest.json", `{"plugins":[{"name":"design","generation":2},{"name":"off"}]}`)
 	f.cli("plugins/synced/"+orgID+"_"+acctID+"/design~g2.meta.json", `{}`)
 	f.cli("settings.json", `{"enabledPlugins":{"off@synced":false}}`)
 
