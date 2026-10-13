@@ -1,5 +1,9 @@
 package inventory
 
+import (
+	"time"
+)
+
 // Kind is the type of thing an Item describes.
 type Kind int
 
@@ -47,6 +51,7 @@ const (
 	OriginSettings        = "settings"
 	OriginAccount         = "account"
 	OriginProject         = "project"
+	OriginData            = "data" // plugins/data/<plugin>-<marketplace>, a plugin's kept data
 )
 
 // Install is one copy of an Item found in one store.
@@ -71,6 +76,7 @@ type Item struct {
 	Kind     Kind
 	Name     string
 	Installs []Install
+	Copies   []Copy // every on-disk copy, active ones included; see Copy
 }
 
 // OnSide reports whether the item has any install on side s.
@@ -163,10 +169,11 @@ func (it Item) EnabledSplit() bool {
 
 // Mismatched reports whether the item deserves attention: present on only one
 // side (unless it is an account connector), differing content, loaded twice,
-// or enabled on one side only.
+// enabled on one side only, or left behind by an incomplete uninstall.
 func (it Item) Mismatched() bool {
 	return (it.OnlyCLI() || it.OnlyDSK()) && !it.Account() ||
-		it.Differs() || it.Twice(SideCLI) || it.Twice(SideDSK) || it.EnabledSplit()
+		it.Differs() || it.Twice(SideCLI) || it.Twice(SideDSK) || it.EnabledSplit() ||
+		len(it.Leftovers()) > 0
 }
 
 // Inventory is the comparison of the CLI and Desktop stores.
@@ -174,4 +181,111 @@ type Inventory struct {
 	Skills, Plugins, MCP []Item
 	HasDesktop           bool // a Desktop support dir exists
 	Errs                 []error
+}
+
+// CopyStatus says how an on-disk copy relates to what the tool loads.
+type CopyStatus int
+
+const (
+	CopyActive   CopyStatus = iota // the copy the install records point at
+	CopyStale                      // an old cache version Claude Code will sweep itself
+	CopyLeftover                   // left behind by an uninstall; nothing sweeps it
+)
+
+func (s CopyStatus) String() string {
+	switch s {
+	case CopyActive:
+		return "active"
+	case CopyStale:
+		return "stale"
+	case CopyLeftover:
+		return "leftover"
+	}
+	return "unknown"
+}
+
+// orphanGrace is how long Claude Code keeps a plugin cache version after it
+// marks it with .orphaned_at before deleting it. Claude Code 2.1.296's
+// orphaned-version sweep deletes a marked dir once the marker's mtime is more
+// than 14 days old, unless a live session uses it.
+const orphanGrace = 14 * 24 * time.Hour
+
+// Copy is one on-disk copy of an Item: the active one, an old cache version,
+// or something an uninstall left behind. Skill and MCP copies found inside a
+// stale or leftover plugin copy carry that plugin copy's Path, so Path is
+// always the unit that would be moved.
+type Copy struct {
+	Status     CopyStatus
+	Side       Side
+	Origin     string // one of the Origin constants
+	Plugin     string // plugin providing the copy, "" when none
+	Path       string
+	Version    string
+	Size       int64     // bytes in regular files; symlinks are not followed
+	ModTime    time.Time // the directory's mtime
+	OrphanedAt time.Time // mtime of Claude Code's .orphaned_at marker; zero if not marked
+	LivePIDs   []int     // live sessions that have this copy in use
+	Trashable  bool      // a leftover clasp may move to the Trash
+	Why        string    // the human reason for the status or for Trashable
+}
+
+// DeleteAfter is when Claude Code may delete a marked cache copy; zero if the
+// copy is not marked.
+func (c Copy) DeleteAfter() time.Time {
+	if c.OrphanedAt.IsZero() {
+		return time.Time{}
+	}
+	return c.OrphanedAt.Add(orphanGrace)
+}
+
+// StaleCount is the number of stale copies.
+func (it Item) StaleCount() int {
+	n := 0
+	for _, c := range it.Copies {
+		if c.Status == CopyStale {
+			n++
+		}
+	}
+	return n
+}
+
+// Leftovers returns the copies left behind by an uninstall.
+func (it Item) Leftovers() []Copy {
+	var out []Copy
+	for _, c := range it.Copies {
+		if c.Status == CopyLeftover {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// TrashableLeftovers returns the leftovers clasp may move to the Trash.
+func (it Item) TrashableLeftovers() []Copy {
+	var out []Copy
+	for _, c := range it.Leftovers() {
+		if c.Trashable {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// Find returns the item of the given kind and name, or nil.
+func (inv *Inventory) Find(kind Kind, name string) *Item {
+	var items []Item
+	switch kind {
+	case KindSkill:
+		items = inv.Skills
+	case KindPlugin:
+		items = inv.Plugins
+	case KindMCP:
+		items = inv.MCP
+	}
+	for i := range items {
+		if items[i].Name == name {
+			return &items[i]
+		}
+	}
+	return nil
 }

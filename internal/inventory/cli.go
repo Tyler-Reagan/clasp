@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -45,6 +46,8 @@ func (s cliSource) load(c *collector) {
 	s.loadPersonal(c)
 	s.loadMarketplace(c, settings.EnabledPlugins)
 	s.loadSynced(c, settings.EnabledPlugins)
+	s.loadCache(c)
+	s.loadData(c)
 	loadStandaloneMCP(c, []mcpSource{
 		{settingsPath, settings.MCPServers},
 		{localPath, local.MCPServers},
@@ -152,11 +155,50 @@ func (s cliSource) loadMarketplace(c *collector, enabled map[string]bool) {
 }
 
 // gSuffix matches the ~g2 style generation suffix on synced plugin dirs.
-var gSuffix = regexp.MustCompile(`~g\d+$`)
+var gSuffix = regexp.MustCompile(`~g(\d+)$`)
+
+// splitGeneration splits a synced dir name into its plugin name and
+// generation; a bare name is generation 1.
+func splitGeneration(dir string) (name string, gen int) {
+	m := gSuffix.FindStringSubmatch(dir)
+	if m == nil {
+		return dir, 1
+	}
+	gen, _ = strconv.Atoi(m[1])
+	return strings.TrimSuffix(dir, m[0]), gen
+}
+
+// syncedGenerations reads <acct>/manifest.json: the generation of each synced
+// plugin by name (absent means 1). known is false when the manifest is
+// missing, unreadable or lists nothing, and then no dir may be called a
+// leftover: never guess.
+func syncedGenerations(c *collector, acctDir string) (gens map[string]int, known bool) {
+	var m struct {
+		Plugins []struct {
+			Name       string `json:"name"`
+			Generation *int   `json:"generation"`
+		} `json:"plugins"`
+	}
+	found, err := readJSON(filepath.Join(acctDir, "manifest.json"), &m)
+	c.err(err)
+	if !found || err != nil || len(m.Plugins) == 0 {
+		return nil, false
+	}
+	gens = map[string]int{}
+	for _, p := range m.Plugins {
+		gens[p.Name] = 1
+		if p.Generation != nil {
+			gens[p.Name] = *p.Generation
+		}
+	}
+	return gens, true
+}
 
 // loadSynced reads ~/.claude/plugins/synced/<org>_<account>/<plugin>[~gN]/,
 // the account plugins Claude syncs down from claude.ai. Files beside the
-// plugin dirs (manifest.json, *.meta.json) are not plugins.
+// plugin dirs (manifest.json, *.meta.json) are not plugins. A dir from an
+// older generation, or one the manifest no longer lists, is a leftover: it is
+// recorded as a Copy and not loaded as an Install.
 func (s cliSource) loadSynced(c *collector, enabled map[string]bool) {
 	root := filepath.Join(s.env.ClaudeDir, "plugins", "synced")
 	accounts, err := subdirs(root)
@@ -166,16 +208,25 @@ func (s cliSource) loadSynced(c *collector, enabled map[string]bool) {
 		if org, account, ok := strings.Cut(acct, "_"); ok {
 			label = accountLabel(org, account)
 		}
+		gens, known := syncedGenerations(c, filepath.Join(root, acct))
 		plugins, err := subdirs(filepath.Join(root, acct))
 		c.err(err)
 		for _, dir := range plugins {
 			path := filepath.Join(root, acct, dir)
 			meta, err := readPluginMeta(path)
 			c.err(err)
+			base, gen := splitGeneration(dir)
 			name := meta.Name
 			if name == "" {
-				name = gSuffix.ReplaceAllString(dir, "")
+				name = base
 			}
+			cp := Copy{Status: CopyActive, Side: SideCLI, Origin: OriginSynced, Version: meta.Version}
+			if g, listed := gens[base]; known && (!listed || g != gen) {
+				cp.Status = CopyLeftover
+				c.addPluginCopy(path, name, cp)
+				continue
+			}
+			c.addPluginCopy(path, name, cp)
 			// Synced plugins load unless settings.json switches them off.
 			on, set := enabled[name+"@synced"]
 			c.addPlugin(pluginDir{
