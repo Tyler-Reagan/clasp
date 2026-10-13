@@ -124,7 +124,7 @@ func invMark(it inventory.Item, side inventory.Side) string {
 	return "  " + glyph
 }
 
-// invFlags is the plain-text flag run ("≠", "×2", "≠ ×2") for an item.
+// invFlags is the plain-text flag run ("≠", "×2", "◌3", "⌫") for an item.
 func invFlags(it inventory.Item) string {
 	var f []string
 	if it.Differs() {
@@ -132,6 +132,12 @@ func invFlags(it inventory.Item) string {
 	}
 	if it.Twice(inventory.SideCLI) || it.Twice(inventory.SideDSK) {
 		f = append(f, "×2")
+	}
+	if n := it.StaleCount(); n > 0 {
+		f = append(f, fmt.Sprintf("◌%d", n))
+	}
+	if len(it.Leftovers()) > 0 {
+		f = append(f, "⌫")
 	}
 	return strings.Join(f, " ")
 }
@@ -175,24 +181,46 @@ func (m Model) invRows(t tab) []rowItem {
 	return rows
 }
 
-// invSummary is the status-bar line for an inventory tab, "" without Desktop.
+// invSummary is the status-bar line for an inventory tab. The Desktop part
+// ("in both · differ · mismatched") needs a Desktop store; the copy part
+// ("N stale", "M leftover") does not, and a zero count is omitted.
 func (m Model) invSummary(t tab) string {
-	if !m.hasDesktop() || !invTab(t) {
+	if !invTab(t) {
 		return ""
 	}
-	both, differ, mism := 0, 0, 0
+	var parts []string
+	if m.hasDesktop() {
+		both, differ, mism := 0, 0, 0
+		for _, it := range m.invAll(t) {
+			if it.OnSide(inventory.SideCLI) && it.OnSide(inventory.SideDSK) {
+				both++
+			}
+			if it.Differs() {
+				differ++
+			}
+			if it.Mismatched() {
+				mism++
+			}
+		}
+		parts = append(parts, fmt.Sprintf("%d in both · %d differ · %d mismatched", both, differ, mism))
+	}
+	stale, left := 0, 0
 	for _, it := range m.invAll(t) {
-		if it.OnSide(inventory.SideCLI) && it.OnSide(inventory.SideDSK) {
-			both++
-		}
-		if it.Differs() {
-			differ++
-		}
-		if it.Mismatched() {
-			mism++
+		stale += it.StaleCount()
+		if len(it.Leftovers()) > 0 {
+			left++
 		}
 	}
-	return styleMuted.Render(fmt.Sprintf("%d in both · %d differ · %d mismatched", both, differ, mism))
+	if stale > 0 {
+		parts = append(parts, fmt.Sprintf("%d stale", stale))
+	}
+	if left > 0 {
+		parts = append(parts, fmt.Sprintf("%d leftover", left))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return styleMuted.Render(strings.Join(parts, " · "))
 }
 
 // ── toggle ───────────────────────────────────────────────────────────────────
@@ -310,6 +338,8 @@ func (m Model) invDetail(t tab) string {
 	if desk {
 		status := ""
 		switch {
+		case len(it.Installs) == 0:
+			status = "not installed; only copies left on disk"
 		case it.Account():
 			status = "account (claude.ai)"
 		case it.OnlyCLI():
@@ -398,6 +428,8 @@ func (m Model) invDetail(t tab) string {
 		}
 	}
 
+	lines = append(lines, copyLines(it, w)...)
+
 	if desk {
 		lines = append(lines, styleMuted.Render(strings.Join(wrapWords(loadNote, w), "\n")))
 	}
@@ -409,6 +441,98 @@ func (m Model) invDetail(t tab) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// humanSize renders a byte count as 512B, 32K, 1.5M.
+func humanSize(n int64) string {
+	const k = 1024
+	switch {
+	case n < k:
+		return fmt.Sprintf("%dB", n)
+	case n < k*k:
+		return fmt.Sprintf("%dK", (n+k/2)/k)
+	case n < k*k*k:
+		return fmt.Sprintf("%.1fM", float64(n)/(k*k))
+	}
+	return fmt.Sprintf("%.1fG", float64(n)/(k*k*k))
+}
+
+// distinctSize sums copy sizes once per path: several items can share one
+// Copy.Path, but here the slice is a single item's, so duplicates only arise
+// if a path repeats within it.
+func distinctSize(cs []inventory.Copy) (n int, size int64) {
+	seen := map[string]bool{}
+	for _, c := range cs {
+		if seen[c.Path] {
+			continue
+		}
+		seen[c.Path] = true
+		n++
+		size += c.Size
+	}
+	return n, size
+}
+
+// copyLines is the "On-disk copies" detail section, ending with the t hint.
+func copyLines(it *inventory.Item, w int) []string {
+	if len(it.Copies) == 0 {
+		return nil
+	}
+	lines := []string{styleDetailTitle.Render("On-disk copies")}
+	for _, c := range it.Copies {
+		st := styleGreen.Render(c.Status.String())
+		if c.Status != inventory.CopyActive {
+			st = styleYellow.Render(c.Status.String())
+		}
+		date := "—"
+		if !c.ModTime.IsZero() {
+			date = c.ModTime.Format("2006-01-02")
+		}
+		lines = append(lines,
+			"  "+st+styleMuted.Render(" · ")+styleVal.Render(humanSize(c.Size))+styleMuted.Render(" · ")+styleVal.Render(date),
+			indentKV("path", shortPath(c.Path), w))
+		if c.Why != "" {
+			lines = append(lines, indentKV("why", c.Why, w))
+		}
+	}
+	lines = append(lines, "")
+	if n, _ := distinctSize(it.TrashableLeftovers()); n > 0 {
+		noun := "leftover"
+		if n != 1 {
+			noun = "leftovers"
+		}
+		lines = append(lines, styleYellow.Render(fmt.Sprintf("t  move %d %s to the Trash (asks first)", n, noun)), "")
+	} else if len(it.Leftovers()) > 0 {
+		lines = append(lines, styleMuted.Render("nothing here can be moved to the Trash"), "")
+	}
+	return lines
+}
+
+// kindFor maps an inventory tab to its item kind.
+func kindFor(t tab) inventory.Kind {
+	switch t {
+	case tabPlugins:
+		return inventory.KindPlugin
+	case tabMCP:
+		return inventory.KindMCP
+	}
+	return inventory.KindSkill
+}
+
+// trashSelected starts the trash confirmation for the selected item's
+// trashable leftovers, or says there is nothing to do.
+func (m Model) trashSelected() (Model, tea.Cmd) {
+	it := m.selectedItem()
+	if it == nil || !invTab(m.tab) {
+		return m, nil
+	}
+	n, size := distinctSize(it.TrashableLeftovers())
+	if n == 0 {
+		m.statusMsg = styleYellow.Render("nothing trashable here")
+		return m, clearStatusAfter(3 * time.Second)
+	}
+	m.pendingTrash = &trashTarget{kind: kindFor(m.tab), name: it.Name, n: n, size: size}
+	return m, nil
 }
 
 // matchingPlugin finds the state.Plugin behind an item's Claude Code
