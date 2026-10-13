@@ -120,8 +120,8 @@ func TestCacheNoInstallIsItsOwnItem(t *testing.T) {
 	if len(it.Installs) != 0 || len(it.Copies) != 1 || it.Copies[0].Status != CopyStale || it.Copies[0].Path != dir {
 		t.Errorf("item = %+v", it)
 	}
-	if it.Mismatched() {
-		t.Error("a stale copy alone is not a mismatch")
+	if !it.Mismatched() {
+		t.Error("an uninstalled plugin with a stale copy still on disk is a mismatch")
 	}
 	if n := mustFind(t, inv.Plugins, "nameless"); n.StaleCount() != 1 {
 		t.Errorf("nameless = %+v", n)

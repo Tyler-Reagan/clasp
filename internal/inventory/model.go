@@ -169,11 +169,13 @@ func (it Item) EnabledSplit() bool {
 
 // Mismatched reports whether the item deserves attention: present on only one
 // side (unless it is an account connector), differing content, loaded twice,
-// enabled on one side only, or left behind by an incomplete uninstall.
+// enabled on one side only, left behind by an incomplete uninstall, or
+// uninstalled with copies still on disk (e.g. a cache version Claude Code has
+// not swept yet).
 func (it Item) Mismatched() bool {
 	return (it.OnlyCLI() || it.OnlyDSK()) && !it.Account() ||
 		it.Differs() || it.Twice(SideCLI) || it.Twice(SideDSK) || it.EnabledSplit() ||
-		len(it.Leftovers()) > 0
+		len(it.Leftovers()) > 0 || len(it.Installs) == 0 && len(it.Copies) > 0
 }
 
 // Inventory is the comparison of the CLI and Desktop stores.
