@@ -303,6 +303,14 @@ func TestLiveSessionsLiveness(t *testing.T) {
 	if !reflect.DeepEqual(got, []LiveSession{{PID: 2, CWD: "/b"}}) {
 		t.Errorf("got %v", got)
 	}
+	if _, err := CheckedLiveSessions(f.env); err != nil {
+		t.Errorf("bad.json has no PID name, want no error, got %v", err)
+	}
+	// A half-written file of a running PID makes the list incomplete.
+	f.write(filepath.Join(f.env.ClaudeDir, "sessions", "2.json"), "{")
+	if _, err := CheckedLiveSessions(f.env); err == nil {
+		t.Error("unreadable live session file: want an error")
+	}
 }
 
 func TestWithin(t *testing.T) {
@@ -588,5 +596,22 @@ func TestCancelDuringScan(t *testing.T) {
 	}
 	if len(r.Errors) == 0 {
 		t.Error("want a cancellation note")
+	}
+}
+
+func TestMentionsWholeName(t *testing.T) {
+	for _, c := range []struct {
+		text, name string
+		want       bool
+	}{
+		{"- [A](a.md)", "a.md", true},
+		{"- [D](data.md)", "a.md", false},
+		{"see a.md.", "a.md", true},
+		{"a.md", "a.md", true},
+		{"- [D](old_a.md)", "a.md", false},
+	} {
+		if got := mentions(c.text, c.name); got != c.want {
+			t.Errorf("mentions(%q, %q) = %v, want %v", c.text, c.name, got, c.want)
+		}
 	}
 }

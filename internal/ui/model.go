@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -176,6 +177,7 @@ type Model struct {
 	cruft         *cruft.Report
 	cruftScanning bool
 	cruftGen      int
+	cruftCancel   context.CancelFunc // cancels the scan in flight; nil when none
 	pendingCruft  *cruftTarget
 }
 
@@ -257,11 +259,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusMsg = styleGreen.Render("🗑 trashed " + msg.name)
 		// Reload immediately so the row disappears without waiting on the watcher,
-		// then clear the toast after a beat.
-		return m, tea.Batch(
+		// then clear the toast after a beat. A Cruft report would still list the
+		// deleted file's issues and badges, so rescan it if there is one.
+		cmds := []tea.Cmd{
 			func() tea.Msg { return RefreshMsg{} },
-			clearStatusAfter(3*time.Second),
-		)
+			clearStatusAfter(3 * time.Second),
+		}
+		if m.cruft != nil {
+			cmds = append(cmds, m.startCruftScan())
+		}
+		return m, tea.Batch(cmds...)
 
 	case trashResultMsg:
 		switch {
@@ -291,8 +298,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.gen != m.cruftGen {
 			return m, nil
 		}
-		m.cruft, m.cruftScanning = msg.report, false
-		m.clampCursors()
+		m.applyCruftReport(msg.report)
 		m.detail.SetContent(m.detailContent())
 		return m, nil
 

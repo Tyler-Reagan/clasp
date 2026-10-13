@@ -289,3 +289,33 @@ func TestCruftScanningWithOldReport(t *testing.T) {
 		t.Fatal("old report hidden")
 	}
 }
+
+// After a rescan drops the first worktree, the cursor stays on the worktree
+// it was on rather than sliding onto the next one.
+func TestCruftRescanKeepsSelection(t *testing.T) {
+	m := cruftAt(t, cruftModel(100), ckWorktree, 1) // agitated-feistel
+	r := cruftFixture()
+	r.Worktrees = r.Worktrees[1:]
+	m.cruftGen = 1
+	next, _ := m.Update(cruftScanMsg{gen: 1, report: r})
+	m = next.(Model)
+	e, ok := m.selectedCruft()
+	if !ok || e.kind != ckWorktree || m.cruft.Worktrees[e.idx].Branch != "claude/agitated-feistel" {
+		t.Fatalf("selection moved: %+v", e)
+	}
+}
+
+// A new scan cancels the one still running.
+func TestCruftNewScanCancelsOld(t *testing.T) {
+	withSpies(t)
+	var errs []error // ctx.Err() as each scan starts
+	cruftScan = func(ctx context.Context) *cruft.Report { errs = append(errs, ctx.Err()); return cruftFixture() }
+	m := cruftModel(100)
+	first := m.startCruftScan()
+	second := m.startCruftScan()
+	first()
+	second()
+	if len(errs) != 2 || errs[0] == nil || errs[1] != nil {
+		t.Fatalf("want the first scan cancelled and the second live, got %v", errs)
+	}
+}

@@ -17,14 +17,15 @@ import (
 // a real git repo, a temp Trash, and spies on gitRemove and trashMove. Live
 // sessions come from the fixture, never from the real ~/.claude/sessions.
 type cruftFixture struct {
-	t        *testing.T
-	root     string
-	env      inventory.Env
-	repo     string
-	trash    string
-	sessions []cruft.LiveSession
-	gitCalls [][2]string // repo, path
-	moves    []string
+	t           *testing.T
+	root        string
+	env         inventory.Env
+	repo        string
+	trash       string
+	sessions    []cruft.LiveSession
+	sessionsErr error
+	gitCalls    [][2]string // repo, path
+	moves       []string
 }
 
 func newCruftFixture(t *testing.T) *cruftFixture {
@@ -60,7 +61,7 @@ func newCruftFixture(t *testing.T) *cruftFixture {
 		env     func() inventory.Env
 		scanR   func(context.Context, cruft.Env, string) ([]cruft.Worktree, error)
 		scanP   func(cruft.Env, string) (cruft.ProjectDir, error)
-		live    func(cruft.Env) []cruft.LiveSession
+		live    func(cruft.Env) ([]cruft.LiveSession, error)
 		gitRm   func(context.Context, string, string) error
 		trashMv func(string) error
 	}{cruftEnv, scanRepo, scanProject, liveSessions, gitRemove, trashMove}
@@ -69,7 +70,7 @@ func newCruftFixture(t *testing.T) *cruftFixture {
 		liveSessions, gitRemove, trashMove = saved.live, saved.gitRm, saved.trashMv
 	})
 	cruftEnv = func() inventory.Env { return f.env }
-	liveSessions = func(cruft.Env) []cruft.LiveSession { return f.sessions }
+	liveSessions = func(cruft.Env) ([]cruft.LiveSession, error) { return f.sessions, f.sessionsErr }
 	gitRemove = func(ctx context.Context, repo, path string) error {
 		f.gitCalls = append(f.gitCalls, [2]string{repo, path})
 		return runGitWorktreeRemove(ctx, repo, path)
@@ -299,6 +300,24 @@ func TestTrashProjectDirDead(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(f.trash, filepath.Base(dir), "s1.jsonl")); err != nil {
 		t.Fatalf("not in the Trash: %v", err)
+	}
+}
+
+// An incomplete session list must refuse both writes, never act.
+func TestUnreadableSessionsRefuse(t *testing.T) {
+	f := newCruftFixture(t)
+	f.sessionsErr = errors.New("can't read the session file of running PID 7")
+	wt := f.worktree("done")
+	if err := RemoveWorktree(wt); err == nil || !strings.Contains(err.Error(), "PID 7") {
+		t.Fatalf("RemoveWorktree err = %v", err)
+	}
+	gone := filepath.Join(f.root, "gone")
+	dir := f.project(cruft.EncodeProjectPath(gone), gone)
+	if err := TrashProjectDir(dir); err == nil || !strings.Contains(err.Error(), "PID 7") {
+		t.Fatalf("TrashProjectDir err = %v", err)
+	}
+	if len(f.gitCalls) != 0 || len(f.moves) != 0 {
+		t.Fatalf("acted: git %v moves %v", f.gitCalls, f.moves)
 	}
 }
 

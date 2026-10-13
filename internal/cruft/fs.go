@@ -3,10 +3,13 @@ package cruft
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/tylerreagan/clasp/internal/inventory"
@@ -32,36 +35,55 @@ func EncodeProjectPath(p string) string {
 
 // LiveSessions returns the running sessions recorded in ClaudeDir/sessions.
 // A session is live when its process exists and started at the recorded
-// procStart; an unknown start time counts as live.
+// procStart; an unknown start time counts as live. Read problems are ignored
+// here; guards that act on the result use CheckedLiveSessions.
 func LiveSessions(env Env) []LiveSession {
+	out, _ := CheckedLiveSessions(env)
+	return out
+}
+
+// CheckedLiveSessions is LiveSessions for write guards: it also reports an
+// error when it cannot be sure the list is complete, so a guard can refuse
+// instead of acting. That is the case when the sessions dir exists but cannot
+// be listed, or when a <pid>.json file of a live PID cannot be read or parsed
+// (for example while Claude Code is rewriting it). A missing dir means none.
+func CheckedLiveSessions(env Env) ([]LiveSession, error) {
 	dir := filepath.Join(env.ClaudeDir, "sessions")
 	ents, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("can't read running sessions")
 	}
 	seen := map[int]bool{}
 	var out []LiveSession
+	var unsure error
 	for _, e := range ents {
-		if !e.Type().IsRegular() || !strings.HasSuffix(e.Name(), ".json") {
+		if !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			continue
-		}
+		namePID, _ := strconv.Atoi(strings.TrimSuffix(e.Name(), ".json"))
 		var s struct {
 			PID       int    `json:"pid"`
 			CWD       string `json:"cwd"`
 			ProcStart string `json:"procStart"`
 		}
-		if json.Unmarshal(data, &s) != nil || s.PID <= 0 || seen[s.PID] || !processLive(s.PID, s.ProcStart) {
+		data, rerr := os.ReadFile(filepath.Join(dir, e.Name()))
+		if !e.Type().IsRegular() || rerr != nil || json.Unmarshal(data, &s) != nil || s.PID <= 0 {
+			if namePID > 0 && processLive(namePID, "") {
+				unsure = fmt.Errorf("can't read the session file of running PID %d", namePID)
+			}
+			continue
+		}
+		if seen[s.PID] || !processLive(s.PID, s.ProcStart) {
 			continue
 		}
 		seen[s.PID] = true
 		out = append(out, LiveSession{PID: s.PID, CWD: s.CWD})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].PID < out[j].PID })
-	return out
+	return out, unsure
 }
 
 // dirSize sums the sizes of the files under root and counts them, never

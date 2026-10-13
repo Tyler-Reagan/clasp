@@ -24,7 +24,8 @@ var (
 	// scanProject re-inspects one transcript dir from scratch.
 	scanProject = cruft.ScanProject
 	// liveSessions lists running sessions, probed again right before acting.
-	liveSessions = cruft.LiveSessions
+	// It fails closed: an error means the list may be incomplete.
+	liveSessions = cruft.CheckedLiveSessions
 	// gitRemove runs `git worktree remove` without --force.
 	gitRemove = runGitWorktreeRemove
 )
@@ -89,8 +90,12 @@ func RemoveWorktree(path string) error {
 
 	// Live sessions, probed again right now: one may have started since the
 	// scan above.
+	sessions, err := liveSessions(env)
+	if err != nil {
+		return errors.New("refused: " + err.Error())
+	}
 	var pids []int
-	for _, s := range liveSessions(env) {
+	for _, s := range sessions {
 		if sessionInside(s.CWD, path) || sessionInside(s.CWD, w.Path) {
 			pids = append(pids, s.PID)
 		}
@@ -149,8 +154,12 @@ func TrashProjectDir(dir string) error {
 	}
 
 	// Live sessions, probed again right before the move.
+	sessions, err := liveSessions(env)
+	if err != nil {
+		return errors.New("refused: " + err.Error())
+	}
 	var pids []int
-	for _, s := range liveSessions(env) {
+	for _, s := range sessions {
 		if s.CWD == "" {
 			continue
 		}

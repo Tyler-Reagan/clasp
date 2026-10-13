@@ -122,7 +122,7 @@ func memoryIssues(project, dir string, gone bool) []MemoryIssue {
 		switch {
 		case !haveIndex:
 			add(f, NotInIndex, "no MEMORY.md")
-		case !strings.Contains(index, f):
+		case !mentions(index, f):
 			add(f, NotInIndex, "")
 		}
 	}
@@ -140,6 +140,13 @@ func memoryIssues(project, dir string, gone bool) []MemoryIssue {
 		}
 	}
 	return out
+}
+
+// mentions reports whether name appears in text as a whole file name, so
+// data.md does not count as a mention of a.md.
+func mentions(text, name string) bool {
+	re := regexp.MustCompile(`(^|[^A-Za-z0-9_.-])` + regexp.QuoteMeta(name) + `($|[^A-Za-z0-9_-])`)
+	return re.MatchString(text)
 }
 
 // frontmatterName returns the name: value of a leading --- block.

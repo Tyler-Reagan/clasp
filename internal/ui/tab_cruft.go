@@ -66,19 +66,66 @@ type cruftTarget struct {
 	size int64
 }
 
-func cruftScanCmd(gen int) tea.Cmd {
+func cruftScanCmd(ctx context.Context, cancel context.CancelFunc, gen int) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), cruftScanTimeout)
 		defer cancel()
 		return cruftScanMsg{gen: gen, report: cruftScan(ctx)}
 	}
 }
 
-// startCruftScan begins a scan and invalidates any in flight.
+// startCruftScan begins a scan and cancels any still in flight, so repeated
+// r presses never stack full walks of the transcripts and worktrees.
 func (m *Model) startCruftScan() tea.Cmd {
+	if m.cruftCancel != nil {
+		m.cruftCancel()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), cruftScanTimeout)
+	m.cruftCancel = cancel
 	m.cruftGen++
 	m.cruftScanning = true
-	return cruftScanCmd(m.cruftGen)
+	return cruftScanCmd(ctx, cancel, m.cruftGen)
+}
+
+// cruftKey identifies an entry across scans (kind plus its path or name), so
+// the cursor stays on the same thing when a rescan adds or removes rows.
+func (m Model) cruftKey(e cruftEntry) string {
+	r := m.cruft
+	if r == nil {
+		return ""
+	}
+	switch e.kind {
+	case ckWorktree:
+		return "w" + r.Worktrees[e.idx].Path
+	case ckProject:
+		return "p" + r.Projects[e.idx].Dir
+	case ckDead:
+		return "d" + r.DeadEntries[e.idx]
+	case ckMemory:
+		is := r.Memories[e.idx]
+		return fmt.Sprintf("m%s/%s/%d/%s", is.Project, is.File, is.Kind, is.Detail)
+	case ckSwept:
+		return "s" + r.Swept[e.idx].Path
+	}
+	return fmt.Sprint(e.kind)
+}
+
+// applyCruftReport swaps in a new report and keeps the cursor on the entry it
+// was on, or clamps it when that entry is gone.
+func (m *Model) applyCruftReport(r *cruft.Report) {
+	var key string
+	if e, ok := m.selectedCruft(); ok {
+		key = m.cruftKey(e)
+	}
+	m.cruft, m.cruftScanning, m.cruftCancel = r, false, nil
+	if key != "" {
+		for i, e := range m.cruftEntries() {
+			if m.cruftKey(e) == key {
+				m.cursors[tabCruft] = i
+				break
+			}
+		}
+	}
+	m.clampCursors()
 }
 
 // cruftSize is a compact size: 512K, 7.5M, 263M, 1.5G.
