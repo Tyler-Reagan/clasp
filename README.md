@@ -17,7 +17,7 @@ A near read-only terminal UI companion for [Claude Code](https://claude.ai/code)
 │                              ││ Status:        idle                              │
 │                              ││ Version:       2.1.152                           │
 ╰──────────────────────────────╯╰──────────────────────────────────────────────────╯
- ↑↓/jk list · gg/G top/end · hl/tab switch · ^d/^u scroll · enter zoom · ? help · q quit
+ ↑↓/jk list · gg/G top/end · hl/tab switch · []/group · ^d/^u scroll · enter zoom · ? help · q quit
 ```
 
 The wordmark and accents render in **copper** (`#b87333`); body text is **parchment** (`#d4c5a0`), borders are **steel** (`#5c5c5c`). Warm dark theme, no cyan or sky blue in sight.
@@ -94,7 +94,8 @@ clasp
 |---|---|
 | `j` / `k` or `↑` / `↓` | Navigate list |
 | `gg` / `G` | Jump to top / end of list (vim-style two-press for top) |
-| `Tab` / `Shift+Tab` or `h` / `l` | Switch tabs (also reloads state) |
+| `Tab` / `Shift+Tab` or `h` / `l` | Switch tabs within the current group (also reloads state) |
+| `]` / `[` | Next / previous group: Inventory (Sessions, Skills, Plugins, MCP, Memory), Config (Settings), Cleanup (Cruft); lands on the group's last-used tab |
 | `Ctrl+D` / `Ctrl+U` | Scroll detail pane half-page down/up |
 | `Ctrl+F` / `Ctrl+B` | Scroll detail pane full-page down/up |
 | `Enter` | Zoom into the highlighted item (full-width detail) |
@@ -115,7 +116,7 @@ clasp
 | `j` / `k` or `↑` / `↓` | Scroll detail line-by-line |
 | `gg` / `G` | Jump to top / bottom of detail |
 | `Ctrl+D` / `Ctrl+U` / `Ctrl+F` / `Ctrl+B` | Half- / full-page scroll |
-| `Tab` / `Shift+Tab` or `h` / `l` | Exit zoom AND switch tabs (lands in browse mode) |
+| `Tab` / `Shift+Tab` or `h` / `l`, `]` / `[` | Exit zoom AND switch tab or group (lands in browse mode) |
 | `Esc` | Return to browse mode on the current tab |
 | `?` | Help overlay |
 | `q` / `Ctrl+C` | Quit |

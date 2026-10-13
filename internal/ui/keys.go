@@ -19,6 +19,10 @@ type keyMap struct {
 	NextTab key.Binding
 	PrevTab key.Binding
 
+	// Group navigation: [ / ] switch between Inventory, Config and Cleanup.
+	NextGroup key.Binding
+	PrevGroup key.Binding
+
 	// Detail scroll. Wired in task #11.
 	ScrollDown     key.Binding
 	ScrollUp       key.Binding
@@ -51,6 +55,8 @@ func defaultKeys() keyMap {
 		Top:            key.NewBinding(key.WithHelp("gg", "top")),
 		End:            key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "end")),
 		NextTab:        key.NewBinding(key.WithKeys("tab", "l"), key.WithHelp("tab/l", "next tab")),
+		NextGroup:      key.NewBinding(key.WithKeys("]"), key.WithHelp("] / [", "next/prev group")),
+		PrevGroup:      key.NewBinding(key.WithKeys("["), key.WithHelp("[", "prev group")),
 		PrevTab:        key.NewBinding(key.WithKeys("shift+tab", "h"), key.WithHelp("⇧tab/h", "prev tab")),
 		ScrollDown:     key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("^d", "scroll ½ down")),
 		ScrollUp:       key.NewBinding(key.WithKeys("ctrl+u"), key.WithHelp("^u", "scroll ½ up")),
@@ -89,11 +95,11 @@ func (c contextKeys) ShortHelp() []key.Binding {
 		up, down := k.Up, k.Down
 		up.SetHelp("↑/k", "scroll up")
 		down.SetHelp("↓/j", "scroll down")
-		return []key.Binding{up, down, k.Top, k.End, k.NextTab, k.UnZoom, k.Help, k.Quit}
+		return []key.Binding{up, down, k.Top, k.End, k.NextTab, k.NextGroup, k.UnZoom, k.Help, k.Quit}
 	}
 	// Delete is enabled only on the Memory tab and ShowAll/Project only on
 	// Settings, so help.Model surfaces each only where it applies.
-	return []key.Binding{k.Up, k.Down, k.Top, k.End, k.NextTab, k.Zoom, k.Delete, k.Trash, k.ShowAll, k.Project, k.Source, k.Refresh, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Top, k.End, k.NextTab, k.NextGroup, k.Zoom, k.Delete, k.Trash, k.ShowAll, k.Project, k.Source, k.Refresh, k.Help, k.Quit}
 }
 
 // FullHelp is the ? overlay layout — column groups.
@@ -106,13 +112,13 @@ func (c contextKeys) FullHelp() [][]key.Binding {
 		return [][]key.Binding{
 			{up, down, k.Top, k.End},
 			{k.ScrollDown, k.ScrollUp, k.ScrollPageDown, k.ScrollPageUp},
-			{k.NextTab, k.PrevTab, k.UnZoom},
+			{k.NextTab, k.PrevTab, k.NextGroup, k.UnZoom},
 			{k.Refresh, k.Help, k.Quit},
 		}
 	}
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Top, k.End},
-		{k.NextTab, k.PrevTab, k.Zoom},
+		{k.NextTab, k.PrevTab, k.NextGroup, k.Zoom},
 		{k.ScrollDown, k.ScrollUp, k.ScrollPageDown, k.ScrollPageUp},
 		{k.Toggle, k.Delete, k.Trash, k.ShowAll, k.Project, k.Source, k.Refresh, k.Help, k.Quit},
 	}

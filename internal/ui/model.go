@@ -28,10 +28,42 @@ const (
 	tabMCP
 	tabMemory
 	tabSettings
+	tabCruft
 	tabCount
 )
 
-var tabNames = [tabCount]string{"Sessions", "Skills", "Plugins", "MCP", "Memory", "Settings"}
+var tabNames = [tabCount]string{"Sessions", "Skills", "Plugins", "MCP", "Memory", "Settings", "Cruft"}
+
+// group clusters tabs for [ / ] navigation; h/l/tab cycle within a group.
+type group int
+
+const (
+	groupInventory group = iota
+	groupConfig
+	groupCleanup
+	groupCount
+)
+
+var groupNames = [groupCount]string{"Inventory", "Config", "Cleanup"}
+
+// groupTabs lists each group's tabs in display order.
+var groupTabs = [groupCount][]tab{
+	groupInventory: {tabSessions, tabSkills, tabPlugins, tabMCP, tabMemory},
+	groupConfig:    {tabSettings},
+	groupCleanup:   {tabCruft},
+}
+
+// groupOf maps a tab back to its group.
+func groupOf(t tab) group {
+	for g, ts := range groupTabs {
+		for _, x := range ts {
+			if x == t {
+				return group(g)
+			}
+		}
+	}
+	return groupInventory
+}
 
 // focus is the active interaction surface. The Update dispatcher routes keys
 // based on focus after handling any modal overlays (e.g. ? help — wired in
@@ -106,6 +138,7 @@ type Model struct {
 	st        *state.State
 	loadErr   error
 	tab       tab
+	lastTab   [groupCount]tab // last-used tab per group; zero/invalid entries fall back to the group's first tab
 	focus     focus
 	cursors   [tabCount]int
 	width     int
@@ -162,6 +195,10 @@ func New(projects chan<- string) (*Model, error) {
 
 		projects: projects,
 	}
+	for g := group(0); g < groupCount; g++ {
+		m.lastTab[g] = groupTabs[g][0]
+	}
+	m.lastTab[groupOf(m.tab)] = m.tab
 	// Zoom/UnZoom/Toggle enabled state depends on current focus and tab.
 	m.refreshBindings()
 	m.publishProject()
@@ -353,19 +390,17 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, m.keys.NextTab):
-		m.tab = (m.tab + 1) % tabCount
-		m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
-		m.refreshBindings()
-		m.detail.GotoTop()
-		m.detail.SetContent(m.detailContent())
-		return m, func() tea.Msg { return RefreshMsg{} }
+		m.setTab(m.cycleTab(+1))
+		return m.afterTabSwitch()
 	case key.Matches(msg, m.keys.PrevTab):
-		m.tab = (m.tab - 1 + tabCount) % tabCount
-		m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
-		m.refreshBindings()
-		m.detail.GotoTop()
-		m.detail.SetContent(m.detailContent())
-		return m, func() tea.Msg { return RefreshMsg{} }
+		m.setTab(m.cycleTab(-1))
+		return m.afterTabSwitch()
+	case key.Matches(msg, m.keys.NextGroup):
+		m.setTab(m.groupLanding((groupOf(m.tab) + 1) % groupCount))
+		return m.afterTabSwitch()
+	case key.Matches(msg, m.keys.PrevGroup):
+		m.setTab(m.groupLanding((groupOf(m.tab) - 1 + groupCount) % groupCount))
+		return m.afterTabSwitch()
 	case key.Matches(msg, m.keys.Up):
 		if m.cursors[m.tab] > 0 {
 			m.cursors[m.tab]--
@@ -469,20 +504,23 @@ func (m Model) updateZoom(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.detail.GotoTop()
 		m.detail.SetContent(m.detailContent())
 		return m, nil
-	case key.Matches(msg, m.keys.NextTab), key.Matches(msg, m.keys.PrevTab):
-		// Forgiving Tab: exit zoom AND switch tab, landing in browse on the new tab.
+	case key.Matches(msg, m.keys.NextTab), key.Matches(msg, m.keys.PrevTab),
+		key.Matches(msg, m.keys.NextGroup), key.Matches(msg, m.keys.PrevGroup):
+		// Forgiving switch: exit zoom AND switch tab/group, landing in browse
+		// mode on the new tab.
 		m.focus = focusList
-		if key.Matches(msg, m.keys.NextTab) {
-			m.tab = (m.tab + 1) % tabCount
-		} else {
-			m.tab = (m.tab - 1 + tabCount) % tabCount
+		switch {
+		case key.Matches(msg, m.keys.NextTab):
+			m.setTab(m.cycleTab(+1))
+		case key.Matches(msg, m.keys.PrevTab):
+			m.setTab(m.cycleTab(-1))
+		case key.Matches(msg, m.keys.NextGroup):
+			m.setTab(m.groupLanding((groupOf(m.tab) + 1) % groupCount))
+		default:
+			m.setTab(m.groupLanding((groupOf(m.tab) - 1 + groupCount) % groupCount))
 		}
-		m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
-		m.refreshBindings()
 		m.resizeDetail()
-		m.detail.GotoTop()
-		m.detail.SetContent(m.detailContent())
-		return m, func() tea.Msg { return RefreshMsg{} }
+		return m.afterTabSwitch()
 	case key.Matches(msg, m.keys.Up):
 		m.detail.LineUp(1)
 		return m, nil
@@ -506,6 +544,45 @@ func (m Model) updateZoom(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+// setTab makes t current and remembers it as its group's last-used tab.
+func (m *Model) setTab(t tab) {
+	m.tab = t
+	m.lastTab[groupOf(t)] = t
+}
+
+// cycleTab returns the next (dir=+1) or previous (dir=-1) tab within the
+// current group, wrapping. A one-tab group returns the current tab.
+func (m Model) cycleTab(dir int) tab {
+	ts := groupTabs[groupOf(m.tab)]
+	for i, t := range ts {
+		if t == m.tab {
+			return ts[(i+dir+len(ts))%len(ts)]
+		}
+	}
+	return m.tab
+}
+
+// groupLanding is the tab a group switch lands on: the group's last-used tab,
+// or its first tab when none was recorded.
+func (m Model) groupLanding(g group) tab {
+	for _, t := range groupTabs[g] {
+		if t == m.lastTab[g] {
+			return t
+		}
+	}
+	return groupTabs[g][0]
+}
+
+// afterTabSwitch is the shared tail of every tab or group switch: clamp the
+// new tab's cursor, refresh bindings and detail, and request a fresh load.
+func (m Model) afterTabSwitch() (tea.Model, tea.Cmd) {
+	m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
+	m.refreshBindings()
+	m.detail.GotoTop()
+	m.detail.SetContent(m.detailContent())
+	return m, func() tea.Msg { return RefreshMsg{} }
 }
 
 // refreshBindings updates per-binding Enabled state based on the current
@@ -615,9 +692,21 @@ func renderWordmark() string {
 }
 
 func (m Model) renderHeader() string {
+	cur := groupOf(m.tab)
+
+	// Line 3: the groups. Line 4: a chevron then the current group's tabs.
+	var groups []string
+	for g := group(0); g < groupCount; g++ {
+		if g == cur {
+			groups = append(groups, styleTabActive.Render(groupNames[g]))
+		} else {
+			groups = append(groups, styleTabInactive.Render(groupNames[g]))
+		}
+	}
 	var tabs []string
-	for i, name := range tabNames {
-		if tab(i) == m.tab {
+	for _, t := range groupTabs[cur] {
+		name := tabNames[t]
+		if t == m.tab {
 			label := name
 			// Zoom mode bracket marker — signals that tabs are still reachable
 			// (Tab/h/l forgivingly exits zoom and switches) without losing the
@@ -632,19 +721,26 @@ func (m Model) renderHeader() string {
 	}
 
 	wordmark := renderWordmark()
-	tabRow := strings.Join(tabs, "")
-
 	wordmarkW := lipgloss.Width(wordmark)
 	wordmarkH := lipgloss.Height(wordmark)
-	padW := max(0, m.width-wordmarkW-lipgloss.Width(tabRow))
+	avail := max(0, m.width-wordmarkW)
 
-	// Right column: pad the tab row to the right edge and bottom-align it
-	// against the wordmark so tabs sit on the baseline of the letterforms.
-	rightCol := lipgloss.PlaceVertical(
-		wordmarkH,
-		lipgloss.Bottom,
-		strings.Repeat(" ", padW)+tabRow,
-	)
+	// rightAlign pads row to avail cells, truncating (never wrapping) when it
+	// would overflow.
+	rightAlign := func(row string) string {
+		if lipgloss.Width(row) > avail {
+			row = ansi.Truncate(row, avail, "")
+		}
+		return strings.Repeat(" ", max(0, avail-lipgloss.Width(row))) + row
+	}
+	groupRow := rightAlign(strings.Join(groups, ""))
+	tabRow := rightAlign(styleMuted.Render("›") + strings.Join(tabs, ""))
+
+	// Rows 3 and 4 of the 4-line wordmark; the first two stay empty.
+	rows := make([]string, wordmarkH)
+	rows[wordmarkH-2] = groupRow
+	rows[wordmarkH-1] = tabRow
+	rightCol := strings.Join(rows, "\n")
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, wordmark, rightCol)
 }
@@ -790,6 +886,11 @@ func (m Model) rowsFor(t tab) []rowItem {
 		return rows
 	case tabSettings:
 		return m.settingsRows()
+	case tabCruft:
+		return []rowItem{
+			{isHeader: true, label: "· Cruft scan arrives", dataIdx: -1},
+			{isHeader: true, label: "  in the next step", dataIdx: -1},
+		}
 	}
 	return nil
 }
@@ -897,6 +998,9 @@ func (m Model) detailContent() string {
 
 	case tabSkills, tabPlugins, tabMCP:
 		return m.invDetail(m.tab)
+
+	case tabCruft:
+		return ""
 
 	case tabMemory:
 		memIdx := m.selectedMemoryIdx()
