@@ -21,7 +21,12 @@ type entry struct {
 // collector gathers installs and per-source problems from the sources.
 type collector struct {
 	entries []entry
+	copies  []copyEntry
 	errs    []error
+
+	desktop struct { // Claude Desktop's running state, probed at most once per Load
+		done, running, known bool
+	}
 }
 
 func (c *collector) add(kind Kind, name string, in Install) {
@@ -158,28 +163,10 @@ func (c *collector) addSkill(p pluginDir, md string, enabled bool) {
 // an mcpServers key or as a flat name -> config object.
 func (c *collector) addPluginMCP(p pluginDir) {
 	path := filepath.Join(p.dir, ".mcp.json")
-	var raw map[string]json.RawMessage
-	found, err := readJSON(path, &raw)
+	servers, err := readPluginMCP(path)
 	if err != nil {
 		c.err(err)
 		return
-	}
-	if !found {
-		return
-	}
-	servers := map[string]mcpConfig{}
-	if msg, ok := raw["mcpServers"]; ok {
-		if err := json.Unmarshal(msg, &servers); err != nil {
-			c.err(fmt.Errorf("parse %s: %w", path, err))
-			return
-		}
-	} else {
-		for name, msg := range raw {
-			var cfg mcpConfig
-			if json.Unmarshal(msg, &cfg) == nil && (cfg.URL != "" || cfg.Command != "") {
-				servers[name] = cfg
-			}
-		}
 	}
 	for _, name := range sortedKeys(servers) {
 		cfg := servers[name]
@@ -279,4 +266,28 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// readPluginMCP reads the servers a plugin declares in .mcp.json, either under
+// an mcpServers key or as a flat name -> config object. A missing file has none.
+func readPluginMCP(path string) (map[string]mcpConfig, error) {
+	var raw map[string]json.RawMessage
+	found, err := readJSON(path, &raw)
+	if err != nil || !found {
+		return nil, err
+	}
+	servers := map[string]mcpConfig{}
+	if msg, ok := raw["mcpServers"]; ok {
+		if err := json.Unmarshal(msg, &servers); err != nil {
+			return nil, fmt.Errorf("parse %s: %w", path, err)
+		}
+		return servers, nil
+	}
+	for name, msg := range raw {
+		var cfg mcpConfig
+		if json.Unmarshal(msg, &cfg) == nil && (cfg.URL != "" || cfg.Command != "") {
+			servers[name] = cfg
+		}
+	}
+	return servers, nil
 }

@@ -35,13 +35,14 @@ Claude Code's slash commands are powerful but disruptive mid-conversation. clasp
 - **Memory** — all memory entries across projects, grouped by project, with type, description, and full body
 - **Settings** — every Claude Code setting you have set, with a one-sentence description, its effective value, the file that supplied it, and every other file that also sets it (managed, project local, project, user, and the documented keys in `~/.claude.json`). List keys such as `permissions.allow` show each entry with its source, and `Read`/`Edit` rules that point at paths that no longer exist are flagged. Press `a` to browse all documented keys with their defaults, and `p` to pick which project's settings apply (default: the most recent active session)
 - **Claude Code and Claude Desktop side by side** — the Skills, Plugins and MCP tabs show a **CLI** and a **DSK** column: `●` enabled, `○` disabled, `·` absent, `◇` claude.ai account connector. Rows flag `≠` when installs with the same name differ in content (SHA-256, so a copy with the same version string but newer files is still caught) and `×2` when one plugin is installed twice on the same side (for example a marketplace install plus its claude.ai-synced copy). Press `s` to filter: all, Claude Code only, Desktop only, mismatched. The detail pane lists every install with its origin, account, path, version and hash. Columns show files on disk; which copy a Desktop session loads is not documented, and clasp says so
+- **Stale copies and leftovers** — every on-disk copy of a plugin is listed in its detail pane as active, stale or leftover, with size, date and the reason. Rows flag `◌N` for N stale versions in `plugins/cache` and `⌫` for leftovers; skills and MCP servers inside those copies carry the same marks. Claude Code marks an old cache version with `.orphaned_at` and deletes it 14 days later, so clasp shows that date and never touches the cache itself. Leftovers are synced plugin dirs from an older generation or missing from the synced manifest, Desktop plugin dirs missing from Desktop's plugin manifest, and `plugins/data` folders of uninstalled plugins (shown only: Claude Code keeps those on purpose with `uninstall --keep-data`). Press `t` to move a row's synced and Desktop leftovers to the macOS Trash after a `y` confirmation. clasp refuses any copy a running session uses (its `.in_use/<pid>` names a live process), any active install, and Desktop leftovers while Claude Desktop is running
 - **Zoom mode** — press `Enter` on any list row to expand the detail pane full-width for in-depth reading; `Esc` returns. Plugin detail re-flows into 2 or 3 columns at wide terminals so heavy plugins (vercel, etc.) stay readable without scrolling.
 - **Branded visual identity** — pixel-art "clasp" wordmark inspired by the Claude Code brand; custom warm palette (copper accent, parchment text, steel chrome) instead of generic Catppuccin defaults
 - **Context-sensitive help** — `?` opens an overlay listing the keybindings that fire in the current mode (browse vs zoom)
 - **Live updates** — `fsnotify` watches `~/.claude` and refreshes automatically on any change; tab-switch also triggers a fresh load
 - **Plugin toggle** — press `space` in the Plugins tab to enable/disable a plugin (atomic temp-file + rename on `~/.claude/settings.json`)
-- **Memory delete** — press `d` in the Memory tab to remove an entry: confirm with `y` and the `.md` file moves to the macOS Trash (recoverable in Finder), with its pointer line pruned from `MEMORY.md` in the same step. `MEMORY.md` itself is the index and is never deletable. The only destructive action clasp offers, and the only one gated behind a confirmation.
-- **Otherwise zero interference** — those two `~/.claude` writes aside, clasp never writes to or signals the Claude Code process
+- **Memory delete** — press `d` in the Memory tab to remove an entry: confirm with `y` and the `.md` file moves to the macOS Trash (recoverable in Finder), with its pointer line pruned from `MEMORY.md` in the same step. `MEMORY.md` itself is the index and is never deletable.
+- **Otherwise zero interference** — the plugin toggle, memory delete and leftover trash aside, clasp keeps no state of its own and clasp never writes to or signals the Claude Code process
 
 ## Requirements
 
@@ -99,6 +100,7 @@ clasp
 | `Enter` | Zoom into the highlighted item (full-width detail) |
 | `space` | Toggle plugin on/off (Plugins tab only) |
 | `d` | Delete memory entry → macOS Trash (Memory tab only; confirm with `y`) |
+| `t` | Move the row's synced and Desktop leftovers → macOS Trash (Skills, Plugins, MCP; confirm with `y`) |
 | `s` | Cycle source filter: all / Claude Code only / Desktop only / mismatched (Skills, Plugins, MCP; needs Claude Desktop) |
 | `a` | Show all documented keys / only set keys (Settings tab only) |
 | `p` | Pick the project whose settings apply (Settings tab only) |
@@ -135,6 +137,8 @@ clasp reads state directly from the files Claude Code writes to `~/.claude`:
 
 The **DSK** column reads Claude Desktop's own store (`~/Library/Application Support/Claude` on macOS, `~/.config/Claude` on Linux): the `anthropic-skills` plugin under `local-agent-mode-sessions/skills-plugin/` (with its `manifest.json` enabled flags), account plugins under `local-agent-mode-sessions/*/*/rpm/` (matched by `.claude-plugin/plugin.json` name), and `mcpServers` in `claude_desktop_config.json`. Every org/account folder is read. clasp never opens Desktop's `config.json` (it holds sign-in tokens) or per-session folders. Desktop's Code tab reads `~/.claude` like the CLI, so its files count under CLI.
 
+On-disk copies come from every `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/` (active when `installed_plugins.json` points at it; its `.orphaned_at` mtime gives Claude Code's deletion date), synced dirs against `plugins/synced/<account>/manifest.json` generations, Desktop `rpm/plugin_<id>` dirs against `rpm/manifest.json`, and `plugins/data/<plugin>-<marketplace>/`. A missing or empty manifest makes every dir count as active. A copy is in use when one of its `.in_use/<pid>` files names a live process whose start time matches. Before each move the trash path reloads everything and re-checks the path, its root, active installs, live sessions and, for Desktop, that the app is not running.
+
 A background goroutine uses `fsnotify` to watch these files and directories (including `~/.claude.json`, the managed settings directory, the selected project's `.claude/`, `plugins/synced`, `claude_desktop_config.json` and Desktop's skill and plugin folders) and sends one refresh message per burst of changes.
 
 Setting descriptions come from Anthropic's [settings reference](https://code.claude.com/docs/en/settings-reference), rewritten in ASD-STE100 Simplified Technical English. The catalog is embedded at build time; clasp never goes online. To refresh it after the docs change:
@@ -153,8 +157,9 @@ clasp/
 └── internal/
     ├── state/
     │   ├── state.go             # reads and parses ~/.claude state files; LoadFor(project)
-    │   └── write.go             # plugin enable/disable writer (atomic rename)
-    ├── inventory/               # CLI vs Desktop skills, plugins, MCP: sources, hash cache, compare
+    │   ├── write.go             # plugin enable/disable writer (atomic rename), memory delete
+    │   └── trash.go             # leftover → macOS Trash, with fresh guards per path
+    ├── inventory/               # CLI vs Desktop skills, plugins, MCP: sources, hash cache, compare, on-disk copies, in-use check
     ├── settings/
     │   ├── catalog.go           # embedded docs catalog + STE descriptions
     │   ├── catalog.json         # generated from the settings reference
@@ -165,7 +170,7 @@ clasp/
     │   └── gen/                 # go generate: settings reference → catalog.json
     ├── ui/
     │   ├── model.go             # Bubble Tea root model, focus dispatch, layout
-    │   ├── tab_inventory.go     # Skills/Plugins/MCP rows with CLI/DSK columns, source filter, install detail
+    │   ├── tab_inventory.go     # Skills/Plugins/MCP rows with CLI/DSK columns, source filter, install and copy detail
     │   ├── tab_settings.go      # Settings tab rows, detail pane, project picker
     │   ├── keys.go              # keyMap (bubbles/key bindings) + contextKeys help wrapper
     │   ├── vim.go               # gg two-press chord state machine
@@ -204,7 +209,7 @@ clasp/
 **Milestone 6 — config legibility** (in progress)
 - [x] Settings tab — effective value, source file, layers, STE descriptions, dead permission paths
 - [x] Claude Code and Claude Desktop side by side — CLI/DSK columns, source filter, content-hash drift and duplicate installs
-- [ ] Stale caches and incomplete uninstalls
+- [x] Stale caches and incomplete uninstalls — stale/leftover badges, Claude Code's deletion dates, `t` trash for leftovers
 - [ ] Cruft: worktrees, transcripts, dead projects, memories
 - [ ] Model and effort audit
 

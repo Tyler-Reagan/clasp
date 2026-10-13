@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/charmbracelet/glamour"
 	glamourstyles "github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/tylerreagan/clasp/internal/inventory"
 	"github.com/tylerreagan/clasp/internal/state"
 )
 
@@ -63,6 +66,26 @@ type deleteTarget struct {
 	name    string
 }
 
+// trashTarget is an inventory item whose leftover copies await trash
+// confirmation; n and size cover distinct paths.
+type trashTarget struct {
+	kind inventory.Kind
+	name string
+	n    int
+	dirs string // the directories that will move, e.g. "design~g1", so a skill row names its plugin
+	size int64
+}
+
+// trashResultMsg reports a TrashLeftovers run.
+type trashResultMsg struct {
+	moved   []string
+	refused map[string]string
+	err     error
+}
+
+// trashLeftovers is swapped by tests so they never touch the filesystem.
+var trashLeftovers = state.TrashLeftovers
+
 // rowItem separates the styled indicator from the plain label so truncation
 // operates only on plain bytes (no ANSI escape codes).
 // isHeader marks non-selectable group header rows; dataIdx is an optional
@@ -108,6 +131,10 @@ type Model struct {
 	// or cancels (anything else). Delete is irreversible, so it never fires on
 	// a single keypress the way the plugin toggle does.
 	pendingDelete *deleteTarget
+
+	// pendingTrash is the sibling modal for moving an inventory item's
+	// leftover copies to the Trash; same priority and y/anything-else rules.
+	pendingTrash *trashTarget
 }
 
 // New loads state and builds the model. projects, if non-nil, receives the
@@ -190,6 +217,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			clearStatusAfter(3*time.Second),
 		)
 
+	case trashResultMsg:
+		switch {
+		case msg.err != nil:
+			m.statusMsg = styleRed.Render("✗ " + msg.err.Error())
+		default:
+			s := styleGreen.Render(fmt.Sprintf("moved %d to the Trash", len(msg.moved)))
+			if len(msg.moved) == 0 {
+				s = styleYellow.Render("nothing moved")
+			}
+			if k := len(msg.refused); k > 0 {
+				paths := make([]string, 0, k)
+				for p := range msg.refused {
+					paths = append(paths, p)
+				}
+				sort.Strings(paths)
+				s += styleYellow.Render(fmt.Sprintf(" · %d refused: %s", k, msg.refused[paths[0]]))
+			}
+			m.statusMsg = s
+		}
+		return m, tea.Batch(
+			func() tea.Msg { return RefreshMsg{} },
+			clearStatusAfter(4*time.Second),
+		)
+
 	case clearStatusMsg:
 		m.statusMsg = ""
 		return m, nil
@@ -208,6 +259,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// y/n answer, captured before any normal dispatch.
 		if m.pendingDelete != nil {
 			return m.updateConfirmDelete(msg)
+		}
+
+		if m.pendingTrash != nil {
+			return m.updateConfirmTrash(msg)
 		}
 
 		// Global keys: handled regardless of focus.
@@ -259,6 +314,25 @@ func (m Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 		m.pendingDelete = nil
 		m.statusMsg = styleMuted.Render("· delete cancelled")
+		return m, clearStatusAfter(2 * time.Second)
+	}
+}
+
+// updateConfirmTrash handles the y/n answer to a pending leftover trash.
+func (m Model) updateConfirmTrash(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "y", "Y":
+		t := *m.pendingTrash
+		m.pendingTrash = nil
+		return m, func() tea.Msg {
+			moved, refused, err := trashLeftovers(t.kind, t.name)
+			return trashResultMsg{moved: moved, refused: refused, err: err}
+		}
+	default:
+		m.pendingTrash = nil
+		m.statusMsg = styleMuted.Render("· trash cancelled")
 		return m, clearStatusAfter(2 * time.Second)
 	}
 }
@@ -321,6 +395,11 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.detail.GotoTop()
 		m.detail.SetContent(m.detailContent())
 		return m, nil
+	case key.Matches(msg, m.keys.Trash):
+		if !invTab(m.tab) {
+			return m, nil
+		}
+		return m.trashSelected()
 	case key.Matches(msg, m.keys.ShowAll):
 		m.toggleSettingsAll()
 		m.detail.GotoTop()
@@ -440,6 +519,7 @@ func (m *Model) refreshBindings() {
 	m.keys.ShowAll.SetEnabled(settings)
 	m.keys.Project.SetEnabled(settings)
 	m.keys.Delete.SetEnabled(m.focus == focusList && m.tab == tabMemory)
+	m.keys.Trash.SetEnabled(m.focus == focusList && invTab(m.tab))
 	m.keys.Source.SetEnabled(m.focus == focusList && invTab(m.tab) && m.hasDesktop())
 }
 
@@ -632,6 +712,10 @@ func (m Model) renderStatus() string {
 		// to read as the active choice; N is capitalized to signal the default.
 		right = styleYellow.Render("trash '"+m.pendingDelete.name+"'? ") +
 			stylePrimary.Render("y") + styleMuted.Render("/N")
+	} else if m.pendingTrash != nil {
+		t := m.pendingTrash
+		right = styleYellow.Render(fmt.Sprintf("trash %s (%s)? ", t.dirs, humanSize(t.size))) +
+			stylePrimary.Render("y") + styleMuted.Render("/N")
 	} else if m.statusMsg != "" {
 		right = m.statusMsg
 	} else if m.loadErr != nil {
@@ -643,8 +727,11 @@ func (m Model) renderStatus() string {
 	// help.Model truncates with "…" at Width; reserve the bar's padding and
 	// the right-hand message so a long hint never wraps onto a second line.
 	h := m.help
-	h.Width = max(0, m.width-2-lipgloss.Width(right))
+	h.Width = max(0, m.width-3-lipgloss.Width(right)) // one space before right
 	hint := h.View(contextKeys{keys: m.keys, focus: m.focus})
+	// help.Model (bubbles v1.0.0) adds every remaining binding once its "…"
+	// no longer fits, so cut the hint to the reserved width as well.
+	hint = ansi.Truncate(hint, h.Width, "…")
 	pad := max(0, m.width-2-lipgloss.Width(hint)-lipgloss.Width(right))
 	bar := hint + strings.Repeat(" ", pad) + right
 
@@ -844,8 +931,9 @@ func (m Model) listOuter() int { return 32 }
 // panelH is the inner content height (excluding border) for both panel boxes.
 //
 // Vertical stack: header(4) + separator(1) + panel outer(panelH+2) + status(1) = m.height
-//   → panel outer = m.height - 6
-//   → panel inner = panel outer - 2 = m.height - 8
+//
+//	→ panel outer = m.height - 6
+//	→ panel inner = panel outer - 2 = m.height - 8
 //
 // The header is 4 rows because it carries the pixel-art wordmark. lipgloss v1
 // convention: styleBorder.Height(n) sets inner height to n; outer = n+2.

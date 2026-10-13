@@ -77,7 +77,9 @@ func (s desktopSource) loadSkillsPlugin(c *collector, sessions string) {
 
 // loadRPM reads <a>/<b>/rpm/, the plugins installed from the user's account.
 // Each plugin_* dir has an opaque name, so it is identified by the name in its
-// .claude-plugin/plugin.json (or, failing that, its manifest.json entry).
+// .claude-plugin/plugin.json (or, failing that, its manifest.json entry). A
+// dir missing from manifest.json is a leftover of an uninstall: it becomes a
+// Copy, not an Install.
 func (s desktopSource) loadRPM(c *collector, sessions string) {
 	pairs, err := idPairs(sessions, "skills-plugin")
 	c.err(err)
@@ -95,12 +97,16 @@ func (s desktopSource) loadRPM(c *collector, sessions string) {
 				Enabled *bool  `json:"enabled"`
 			} `json:"plugins"`
 		}
-		_, err := readJSON(filepath.Join(rpm, "manifest.json"), &manifest)
+		found, err := readJSON(filepath.Join(rpm, "manifest.json"), &manifest)
 		c.err(err)
 		listed := map[string]int{}
 		for i, pl := range manifest.Plugins {
 			listed[pl.ID] = i
 		}
+		// A dir the manifest does not list is a leftover. With no manifest to
+		// go by, every dir stays active: never guess. One that parses with no
+		// plugins means the last one was uninstalled.
+		known := found && err == nil
 
 		dirs, err := subdirs(rpm)
 		c.err(err)
@@ -109,7 +115,15 @@ func (s desktopSource) loadRPM(c *collector, sessions string) {
 			meta, err := readPluginMeta(dir)
 			c.err(err)
 			name, enabled := meta.Name, true
-			if i, ok := listed[d]; ok {
+			i, ok := listed[d]
+			if known && !ok {
+				if name == "" {
+					name = d
+				}
+				c.addPluginCopy(dir, name, Copy{Status: CopyLeftover, Side: SideDSK, Origin: OriginRPM, Version: meta.Version})
+				continue
+			}
+			if ok {
 				if name == "" {
 					name = manifest.Plugins[i].Name
 				}
@@ -118,6 +132,7 @@ func (s desktopSource) loadRPM(c *collector, sessions string) {
 			if name == "" {
 				continue
 			}
+			c.addPluginCopy(dir, name, Copy{Status: CopyActive, Side: SideDSK, Origin: OriginRPM, Version: meta.Version})
 			c.addPlugin(pluginDir{
 				side: SideDSK, origin: OriginRPM, account: account, dir: dir,
 				name: name, version: meta.Version, desc: meta.Description, enabled: enabled,

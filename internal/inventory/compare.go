@@ -24,7 +24,7 @@ func Load(env Env) *Inventory {
 		runSource(s, c)
 	}
 
-	inv.Skills, inv.Plugins, inv.MCP = group(c.entries)
+	inv.Skills, inv.Plugins, inv.MCP = group(c.entries, c.copies)
 	inv.Errs = c.errs
 	return inv
 }
@@ -40,8 +40,9 @@ func runSource(s source, c *collector) {
 }
 
 // group folds installs into one Item per (kind, name), sorted by name. Within
-// an item, CLI installs come before Desktop ones.
-func group(entries []entry) (skills, plugins, mcp []Item) {
+// an item, CLI installs come before Desktop ones. Copies attach to the item of
+// the same kind and name, creating an item that has only copies.
+func group(entries []entry, copies []copyEntry) (skills, plugins, mcp []Item) {
 	type key struct {
 		kind Kind
 		name string
@@ -57,7 +58,27 @@ func group(entries []entry) (skills, plugins, mcp []Item) {
 		it.Installs = append(it.Installs, e.in)
 	}
 
+	for _, ce := range copies {
+		k := key{ce.kind, ce.name}
+		it := items[k]
+		if it == nil {
+			it = &Item{Kind: ce.kind, Name: ce.name}
+			items[k] = it
+		}
+		it.Copies = append(it.Copies, ce.cp)
+	}
+
 	for _, it := range items {
+		sort.SliceStable(it.Copies, func(i, j int) bool {
+			a, b := it.Copies[i], it.Copies[j]
+			if a.Status != b.Status {
+				return a.Status < b.Status
+			}
+			if a.Side != b.Side {
+				return a.Side < b.Side
+			}
+			return a.Path < b.Path
+		})
 		sort.SliceStable(it.Installs, func(i, j int) bool { return it.Installs[i].Side < it.Installs[j].Side })
 		switch it.Kind {
 		case KindSkill:

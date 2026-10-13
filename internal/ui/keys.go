@@ -35,6 +35,7 @@ type keyMap struct {
 	Project key.Binding // Settings: open the project picker
 	Source  key.Binding // Skills/Plugins/MCP: cycle the CLI/Desktop source filter
 	Delete  key.Binding
+	Trash   key.Binding // Skills/Plugins/MCP: move an item's leftover copies to the Trash
 	Refresh key.Binding
 	Help    key.Binding
 	Quit    key.Binding
@@ -42,13 +43,13 @@ type keyMap struct {
 
 func defaultKeys() keyMap {
 	return keyMap{
-		Up:             key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-		Down:           key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+		Up:   key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+		Down: key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
 		// Top is handled inline by the vim-g chord state machine (vim.go) rather
 		// than via key.Matches — gg is a two-press combo, not a single binding.
 		// The binding is kept here only so help.Model renders "gg top" in the bar.
-		Top: key.NewBinding(key.WithHelp("gg", "top")),
-		End: key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "end")),
+		Top:            key.NewBinding(key.WithHelp("gg", "top")),
+		End:            key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "end")),
 		NextTab:        key.NewBinding(key.WithKeys("tab", "l"), key.WithHelp("tab/l", "next tab")),
 		PrevTab:        key.NewBinding(key.WithKeys("shift+tab", "h"), key.WithHelp("⇧tab/h", "prev tab")),
 		ScrollDown:     key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("^d", "scroll ½ down")),
@@ -59,6 +60,7 @@ func defaultKeys() keyMap {
 		UnZoom:         key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		Toggle:         key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "toggle")),
 		Delete:         key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
+		Trash:          key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "trash leftovers")),
 		ShowAll:        key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "all keys")),
 		Project:        key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "project")),
 		Source:         key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "source")),
@@ -91,7 +93,7 @@ func (c contextKeys) ShortHelp() []key.Binding {
 	}
 	// Delete is enabled only on the Memory tab and ShowAll/Project only on
 	// Settings, so help.Model surfaces each only where it applies.
-	return []key.Binding{k.Up, k.Down, k.Top, k.End, k.NextTab, k.Zoom, k.Delete, k.ShowAll, k.Project, k.Source, k.Refresh, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Top, k.End, k.NextTab, k.Zoom, k.Delete, k.Trash, k.ShowAll, k.Project, k.Source, k.Refresh, k.Help, k.Quit}
 }
 
 // FullHelp is the ? overlay layout — column groups.
@@ -112,6 +114,6 @@ func (c contextKeys) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.Top, k.End},
 		{k.NextTab, k.PrevTab, k.Zoom},
 		{k.ScrollDown, k.ScrollUp, k.ScrollPageDown, k.ScrollPageUp},
-		{k.Toggle, k.Delete, k.ShowAll, k.Project, k.Source, k.Refresh, k.Help, k.Quit},
+		{k.Toggle, k.Delete, k.Trash, k.ShowAll, k.Project, k.Source, k.Refresh, k.Help, k.Quit},
 	}
 }
