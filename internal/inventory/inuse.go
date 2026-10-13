@@ -28,6 +28,24 @@ func parseProcStart(s string) (time.Time, bool) {
 	return t, err == nil
 }
 
+// ProcessLive reports whether pid is a live process that started at procStart
+// (the UTC ctime string Claude Code records). If procStart is missing or
+// unparsable, or the OS will not say when the process started, an existing
+// process still counts: not knowing never frees anything.
+func ProcessLive(pid int, procStart string) bool {
+	if pid <= 0 || !procAlive(pid) {
+		return false
+	}
+	recorded, parsed := parseProcStart(procStart)
+	actual, known := procStartTime(pid)
+	if parsed && known {
+		if d := actual.Sub(recorded); d < -startTolerance || d > startTolerance {
+			return false
+		}
+	}
+	return true
+}
+
 // LiveUsers returns the PIDs of live sessions using the plugin copy at dir,
 // from dir/.in_use/<pid> files holding {"pid","procStart"}. A PID is live when
 // the process exists and started at procStart. If procStart is missing or
@@ -49,15 +67,8 @@ func LiveUsers(dir string) []int {
 			PID       int    `json:"pid"`
 			ProcStart string `json:"procStart"`
 		}
-		if json.Unmarshal(data, &u) != nil || u.PID <= 0 || !procAlive(u.PID) {
+		if json.Unmarshal(data, &u) != nil || !ProcessLive(u.PID, u.ProcStart) {
 			continue
-		}
-		recorded, parsed := parseProcStart(u.ProcStart)
-		actual, known := procStartTime(u.PID)
-		if parsed && known {
-			if d := actual.Sub(recorded); d < -startTolerance || d > startTolerance {
-				continue
-			}
 		}
 		pids = append(pids, u.PID)
 	}
