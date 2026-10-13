@@ -120,3 +120,27 @@ func TestProcessListHasDesktop(t *testing.T) {
 		}
 	}
 }
+
+func TestProcessLive(t *testing.T) {
+	start := time.Date(2026, 10, 12, 20, 11, 22, 0, time.UTC)
+	fakeProcs(t, map[int]time.Time{1: start, 2: {}})
+	str := start.Format(time.ANSIC)
+	tests := []struct {
+		name  string
+		pid   int
+		start string
+		want  bool
+	}{
+		{"match", 1, str, true},
+		{"reused pid", 1, start.Add(time.Hour).Format(time.ANSIC), false},
+		{"dead", 3, str, false},
+		{"unknown start counts", 2, str, true},
+		{"unparsable counts", 1, "garbage", true},
+		{"bad pid", 0, str, false},
+	}
+	for _, tt := range tests {
+		if got := ProcessLive(tt.pid, tt.start); got != tt.want {
+			t.Errorf("%s: got %v want %v", tt.name, got, tt.want)
+		}
+	}
+}

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -15,6 +16,7 @@ import (
 	glamourstyles "github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/tylerreagan/clasp/internal/cruft"
 	"github.com/tylerreagan/clasp/internal/inventory"
 	"github.com/tylerreagan/clasp/internal/state"
 )
@@ -28,10 +30,42 @@ const (
 	tabMCP
 	tabMemory
 	tabSettings
+	tabCruft
 	tabCount
 )
 
-var tabNames = [tabCount]string{"Sessions", "Skills", "Plugins", "MCP", "Memory", "Settings"}
+var tabNames = [tabCount]string{"Sessions", "Skills", "Plugins", "MCP", "Memory", "Settings", "Cruft"}
+
+// group clusters tabs for [ / ] navigation; h/l/tab cycle within a group.
+type group int
+
+const (
+	groupInventory group = iota
+	groupConfig
+	groupCleanup
+	groupCount
+)
+
+var groupNames = [groupCount]string{"Inventory", "Config", "Cleanup"}
+
+// groupTabs lists each group's tabs in display order.
+var groupTabs = [groupCount][]tab{
+	groupInventory: {tabSessions, tabSkills, tabPlugins, tabMCP, tabMemory},
+	groupConfig:    {tabSettings},
+	groupCleanup:   {tabCruft},
+}
+
+// groupOf maps a tab back to its group.
+func groupOf(t tab) group {
+	for g, ts := range groupTabs {
+		for _, x := range ts {
+			if x == t {
+				return group(g)
+			}
+		}
+	}
+	return groupInventory
+}
 
 // focus is the active interaction surface. The Update dispatcher routes keys
 // based on focus after handling any modal overlays (e.g. ? help — wired in
@@ -106,6 +140,7 @@ type Model struct {
 	st        *state.State
 	loadErr   error
 	tab       tab
+	lastTab   [groupCount]tab // last-used tab per group; zero/invalid entries fall back to the group's first tab
 	focus     focus
 	cursors   [tabCount]int
 	width     int
@@ -135,6 +170,15 @@ type Model struct {
 	// pendingTrash is the sibling modal for moving an inventory item's
 	// leftover copies to the Trash; same priority and y/anything-else rules.
 	pendingTrash *trashTarget
+
+	// Cruft tab: the last scan (nil until one finishes), whether one is in
+	// flight, a generation that drops stale results, and the removal awaiting
+	// y/n.
+	cruft         *cruft.Report
+	cruftScanning bool
+	cruftGen      int
+	cruftCancel   context.CancelFunc // cancels the scan in flight; nil when none
+	pendingCruft  *cruftTarget
 }
 
 // New loads state and builds the model. projects, if non-nil, receives the
@@ -162,6 +206,10 @@ func New(projects chan<- string) (*Model, error) {
 
 		projects: projects,
 	}
+	for g := group(0); g < groupCount; g++ {
+		m.lastTab[g] = groupTabs[g][0]
+	}
+	m.lastTab[groupOf(m.tab)] = m.tab
 	// Zoom/UnZoom/Toggle enabled state depends on current focus and tab.
 	m.refreshBindings()
 	m.publishProject()
@@ -211,11 +259,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusMsg = styleGreen.Render("🗑 trashed " + msg.name)
 		// Reload immediately so the row disappears without waiting on the watcher,
-		// then clear the toast after a beat.
-		return m, tea.Batch(
+		// then clear the toast after a beat. A Cruft report would still list the
+		// deleted file's issues and badges, so rescan it if there is one.
+		cmds := []tea.Cmd{
 			func() tea.Msg { return RefreshMsg{} },
-			clearStatusAfter(3*time.Second),
-		)
+			clearStatusAfter(3 * time.Second),
+		}
+		if m.cruft != nil {
+			cmds = append(cmds, m.startCruftScan())
+		}
+		return m, tea.Batch(cmds...)
 
 	case trashResultMsg:
 		switch {
@@ -241,6 +294,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			clearStatusAfter(4*time.Second),
 		)
 
+	case cruftScanMsg:
+		if msg.gen != m.cruftGen {
+			return m, nil
+		}
+		m.applyCruftReport(msg.report)
+		m.detail.SetContent(m.detailContent())
+		return m, nil
+
+	case cruftActionMsg:
+		if msg.err != nil {
+			m.statusMsg = styleRed.Render("✗ " + msg.err.Error())
+		} else {
+			m.statusMsg = styleGreen.Render("✓ " + msg.what)
+		}
+		return m, tea.Batch(m.startCruftScan(), clearStatusAfter(4*time.Second))
+
 	case clearStatusMsg:
 		m.statusMsg = ""
 		return m, nil
@@ -265,11 +334,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateConfirmTrash(msg)
 		}
 
+		if m.pendingCruft != nil {
+			return m.updateConfirmCruft(msg)
+		}
+
 		// Global keys: handled regardless of focus.
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
 		case key.Matches(msg, m.keys.Refresh):
+			if m.tab == tabCruft {
+				return m, tea.Batch(func() tea.Msg { return RefreshMsg{} }, m.startCruftScan())
+			}
 			return m, func() tea.Msg { return RefreshMsg{} }
 		case key.Matches(msg, m.keys.Help):
 			m.showHelp = true
@@ -353,19 +429,17 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, m.keys.NextTab):
-		m.tab = (m.tab + 1) % tabCount
-		m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
-		m.refreshBindings()
-		m.detail.GotoTop()
-		m.detail.SetContent(m.detailContent())
-		return m, func() tea.Msg { return RefreshMsg{} }
+		m.setTab(m.cycleTab(+1))
+		return m.afterTabSwitch()
 	case key.Matches(msg, m.keys.PrevTab):
-		m.tab = (m.tab - 1 + tabCount) % tabCount
-		m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
-		m.refreshBindings()
-		m.detail.GotoTop()
-		m.detail.SetContent(m.detailContent())
-		return m, func() tea.Msg { return RefreshMsg{} }
+		m.setTab(m.cycleTab(-1))
+		return m.afterTabSwitch()
+	case key.Matches(msg, m.keys.NextGroup):
+		m.setTab(m.groupLanding((groupOf(m.tab) + 1) % groupCount))
+		return m.afterTabSwitch()
+	case key.Matches(msg, m.keys.PrevGroup):
+		m.setTab(m.groupLanding((groupOf(m.tab) - 1 + groupCount) % groupCount))
+		return m.afterTabSwitch()
 	case key.Matches(msg, m.keys.Up):
 		if m.cursors[m.tab] > 0 {
 			m.cursors[m.tab]--
@@ -396,10 +470,18 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.detail.SetContent(m.detailContent())
 		return m, nil
 	case key.Matches(msg, m.keys.Trash):
+		if m.tab == tabCruft {
+			return m.trashCruftSelected()
+		}
 		if !invTab(m.tab) {
 			return m, nil
 		}
 		return m.trashSelected()
+	case key.Matches(msg, m.keys.Remove):
+		if m.tab != tabCruft {
+			return m, nil
+		}
+		return m.removeCruftSelected()
 	case key.Matches(msg, m.keys.ShowAll):
 		m.toggleSettingsAll()
 		m.detail.GotoTop()
@@ -469,20 +551,23 @@ func (m Model) updateZoom(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.detail.GotoTop()
 		m.detail.SetContent(m.detailContent())
 		return m, nil
-	case key.Matches(msg, m.keys.NextTab), key.Matches(msg, m.keys.PrevTab):
-		// Forgiving Tab: exit zoom AND switch tab, landing in browse on the new tab.
+	case key.Matches(msg, m.keys.NextTab), key.Matches(msg, m.keys.PrevTab),
+		key.Matches(msg, m.keys.NextGroup), key.Matches(msg, m.keys.PrevGroup):
+		// Forgiving switch: exit zoom AND switch tab/group, landing in browse
+		// mode on the new tab.
 		m.focus = focusList
-		if key.Matches(msg, m.keys.NextTab) {
-			m.tab = (m.tab + 1) % tabCount
-		} else {
-			m.tab = (m.tab - 1 + tabCount) % tabCount
+		switch {
+		case key.Matches(msg, m.keys.NextTab):
+			m.setTab(m.cycleTab(+1))
+		case key.Matches(msg, m.keys.PrevTab):
+			m.setTab(m.cycleTab(-1))
+		case key.Matches(msg, m.keys.NextGroup):
+			m.setTab(m.groupLanding((groupOf(m.tab) + 1) % groupCount))
+		default:
+			m.setTab(m.groupLanding((groupOf(m.tab) - 1 + groupCount) % groupCount))
 		}
-		m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
-		m.refreshBindings()
 		m.resizeDetail()
-		m.detail.GotoTop()
-		m.detail.SetContent(m.detailContent())
-		return m, func() tea.Msg { return RefreshMsg{} }
+		return m.afterTabSwitch()
 	case key.Matches(msg, m.keys.Up):
 		m.detail.LineUp(1)
 		return m, nil
@@ -508,6 +593,50 @@ func (m Model) updateZoom(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// setTab makes t current and remembers it as its group's last-used tab.
+func (m *Model) setTab(t tab) {
+	m.tab = t
+	m.lastTab[groupOf(t)] = t
+}
+
+// cycleTab returns the next (dir=+1) or previous (dir=-1) tab within the
+// current group, wrapping. A one-tab group returns the current tab.
+func (m Model) cycleTab(dir int) tab {
+	ts := groupTabs[groupOf(m.tab)]
+	for i, t := range ts {
+		if t == m.tab {
+			return ts[(i+dir+len(ts))%len(ts)]
+		}
+	}
+	return m.tab
+}
+
+// groupLanding is the tab a group switch lands on: the group's last-used tab,
+// or its first tab when none was recorded.
+func (m Model) groupLanding(g group) tab {
+	for _, t := range groupTabs[g] {
+		if t == m.lastTab[g] {
+			return t
+		}
+	}
+	return groupTabs[g][0]
+}
+
+// afterTabSwitch is the shared tail of every tab or group switch: clamp the
+// new tab's cursor, refresh bindings and detail, and request a fresh load.
+func (m Model) afterTabSwitch() (tea.Model, tea.Cmd) {
+	m.cursors[m.tab] = clamp(m.cursors[m.tab], 0, m.listLen()-1)
+	m.refreshBindings()
+	m.detail.GotoTop()
+	m.detail.SetContent(m.detailContent())
+	cmds := []tea.Cmd{func() tea.Msg { return RefreshMsg{} }}
+	if m.tab == tabCruft && m.cruft == nil && !m.cruftScanning {
+		cmds = append(cmds, m.startCruftScan())
+		m.detail.SetContent(m.detailContent())
+	}
+	return m, tea.Batch(cmds...)
+}
+
 // refreshBindings updates per-binding Enabled state based on the current
 // focus and tab. Called whenever those change so help.Model only shows
 // the keys that actually fire in the current context.
@@ -519,7 +648,14 @@ func (m *Model) refreshBindings() {
 	m.keys.ShowAll.SetEnabled(settings)
 	m.keys.Project.SetEnabled(settings)
 	m.keys.Delete.SetEnabled(m.focus == focusList && m.tab == tabMemory)
-	m.keys.Trash.SetEnabled(m.focus == focusList && invTab(m.tab))
+	cruftTab := m.focus == focusList && m.tab == tabCruft
+	m.keys.Trash.SetEnabled(m.focus == focusList && invTab(m.tab) || cruftTab)
+	if m.tab == tabCruft {
+		m.keys.Trash.SetHelp("t", "trash transcripts")
+	} else {
+		m.keys.Trash.SetHelp("t", "trash leftovers")
+	}
+	m.keys.Remove.SetEnabled(cruftTab)
 	m.keys.Source.SetEnabled(m.focus == focusList && invTab(m.tab) && m.hasDesktop())
 }
 
@@ -615,9 +751,21 @@ func renderWordmark() string {
 }
 
 func (m Model) renderHeader() string {
+	cur := groupOf(m.tab)
+
+	// Line 3: the groups. Line 4: a chevron then the current group's tabs.
+	var groups []string
+	for g := group(0); g < groupCount; g++ {
+		if g == cur {
+			groups = append(groups, styleTabActive.Render(groupNames[g]))
+		} else {
+			groups = append(groups, styleTabInactive.Render(groupNames[g]))
+		}
+	}
 	var tabs []string
-	for i, name := range tabNames {
-		if tab(i) == m.tab {
+	for _, t := range groupTabs[cur] {
+		name := tabNames[t]
+		if t == m.tab {
 			label := name
 			// Zoom mode bracket marker — signals that tabs are still reachable
 			// (Tab/h/l forgivingly exits zoom and switches) without losing the
@@ -632,19 +780,26 @@ func (m Model) renderHeader() string {
 	}
 
 	wordmark := renderWordmark()
-	tabRow := strings.Join(tabs, "")
-
 	wordmarkW := lipgloss.Width(wordmark)
 	wordmarkH := lipgloss.Height(wordmark)
-	padW := max(0, m.width-wordmarkW-lipgloss.Width(tabRow))
+	avail := max(0, m.width-wordmarkW)
 
-	// Right column: pad the tab row to the right edge and bottom-align it
-	// against the wordmark so tabs sit on the baseline of the letterforms.
-	rightCol := lipgloss.PlaceVertical(
-		wordmarkH,
-		lipgloss.Bottom,
-		strings.Repeat(" ", padW)+tabRow,
-	)
+	// rightAlign pads row to avail cells, truncating (never wrapping) when it
+	// would overflow.
+	rightAlign := func(row string) string {
+		if lipgloss.Width(row) > avail {
+			row = ansi.Truncate(row, avail, "")
+		}
+		return strings.Repeat(" ", max(0, avail-lipgloss.Width(row))) + row
+	}
+	groupRow := rightAlign(strings.Join(groups, ""))
+	tabRow := rightAlign(styleMuted.Render("›") + strings.Join(tabs, ""))
+
+	// Rows 3 and 4 of the 4-line wordmark; the first two stay empty.
+	rows := make([]string, wordmarkH)
+	rows[wordmarkH-2] = groupRow
+	rows[wordmarkH-1] = tabRow
+	rightCol := strings.Join(rows, "\n")
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, wordmark, rightCol)
 }
@@ -716,10 +871,14 @@ func (m Model) renderStatus() string {
 		t := m.pendingTrash
 		right = styleYellow.Render(fmt.Sprintf("trash %s (%s)? ", t.dirs, humanSize(t.size))) +
 			stylePrimary.Render("y") + styleMuted.Render("/N")
+	} else if m.pendingCruft != nil {
+		right = m.cruftPrompt()
 	} else if m.statusMsg != "" {
 		right = m.statusMsg
 	} else if m.loadErr != nil {
 		right = styleRed.Render("⚠ " + m.loadErr.Error())
+	} else if m.tab == tabCruft && m.cruftScanning {
+		right = styleMuted.Render("scanning…")
 	} else {
 		right = m.invSummary(m.tab)
 	}
@@ -747,6 +906,9 @@ func (m Model) renderStatus() string {
 func (m Model) listRows() []rowItem { return m.rowsFor(m.tab) }
 
 func (m Model) rowsFor(t tab) []rowItem {
+	if t == tabCruft {
+		return m.cruftRows()
+	}
 	if m.st == nil {
 		return nil
 	}
@@ -780,12 +942,16 @@ func (m Model) rowsFor(t tab) []rowItem {
 			if t == "" {
 				t = "·"
 			}
-			rows = append(rows, rowItem{
+			row := rowItem{
 				ind:     styleMuted.Render(string([]rune(t)[0])),
 				indW:    1,
 				label:   name,
 				dataIdx: i,
-			})
+			}
+			if len(m.memoryIssuesFor(e.Project, e.File)) > 0 {
+				row.tail, row.tailW = " "+styleYellow.Render("⚠"), 2
+			}
+			rows = append(rows, row)
 		}
 		return rows
 	case tabSettings:
@@ -873,6 +1039,9 @@ func (m Model) selectedMemoryIdx() int {
 // ── detail content ────────────────────────────────────────────────────────────
 
 func (m Model) detailContent() string {
+	if m.tab == tabCruft {
+		return m.cruftDetail()
+	}
 	if m.st == nil {
 		return styleRed.Render("⚠ could not load ~/.claude state")
 	}
@@ -915,6 +1084,17 @@ func (m Model) detailContent() string {
 			kv("File", e.File),
 			kv("Project", projectLabel(e.Project)),
 		}, "\n")
+		if is := m.memoryIssuesFor(e.Project, e.File); len(is) > 0 {
+			lines := []string{header, "", styleYellow.Render("⚠ Cruft scan found")}
+			for _, i := range is {
+				txt := "· " + i.Kind.String()
+				if i.Detail != "" {
+					txt += ": " + i.Detail
+				}
+				lines = append(lines, noteLines(txt, m.detail.Width)...)
+			}
+			header = strings.Join(lines, "\n")
+		}
 		if e.Body == "" {
 			return header
 		}
