@@ -47,34 +47,26 @@ changelog:
       - "Merge pull request"
       - "Merge branch"
 
-# Publish the generated cask into the personal Homebrew tap.
+# Publish the generated formula into the personal Homebrew tap.
 # Users then run: brew install tyler-reagan/tap/clasp
-homebrew_casks:
+brews:
   - name: clasp
-    binaries:
-      - clasp
     repository:
       owner: Tyler-Reagan
       name: homebrew-tap
       branch: main
       # PAT with contents:write on homebrew-tap, provided by the release workflow.
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Casks
+    directory: Formula
     homepage: "https://github.com/Tyler-Reagan/clasp"
     description: "A read-only terminal UI companion for Claude Code"
+    license: "MIT"
     commit_author:
       name: goreleaser-bot
       email: goreleaser@users.noreply.github.com
-    commit_msg_template: "clasp: update cask to {{ .Tag }}"
-    # The binary is unsigned, so macOS Gatekeeper quarantines it on download.
-    # Strip the quarantine attribute on install so `clasp` launches without
-    # the "cannot be opened because the developer cannot be verified" prompt.
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/clasp"]
-          end
+    commit_msg_template: "clasp: update formula to {{ .Tag }}"
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/clasp --version")
 
 release:
   github:

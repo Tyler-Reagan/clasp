@@ -58,7 +58,7 @@ Claude Code's slash commands are powerful but disruptive mid-conversation. clasp
 
 ## Installation
 
-### Homebrew (macOS)
+### Homebrew (macOS / Linux)
 
 ```bash
 brew install tyler-reagan/tap/clasp
@@ -81,8 +81,7 @@ go build -o clasp .
 mv clasp /usr/local/bin/clasp   # or anywhere on your $PATH
 ```
 
-Linux users: Homebrew casks are macOS-only, so use `go install` or grab a prebuilt
-tarball from the [releases page](https://github.com/Tyler-Reagan/clasp/releases).
+Prebuilt tarballs are also on the [releases page](https://github.com/Tyler-Reagan/clasp/releases).
 
 Check your version any time with `clasp --version`.
 

@@ -33,6 +33,6 @@ jobs:
           # Default token: creates the Release + uploads assets in THIS repo.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # PAT with contents:write on Tyler-Reagan/homebrew-tap so GoReleaser
-          # can push the generated cask there (a cross-repo write the default
+          # can push the generated formula there (a cross-repo write the default
           # GITHUB_TOKEN cannot do). Stored as a repo secret.
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
